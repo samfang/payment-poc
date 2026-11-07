@@ -159,7 +159,7 @@ All error responses use a consistent envelope (Microsoft structure with PayPal's
         "target": "amount"
       }
     ],
-    "debugId": "dbg_4c2a1f8e"
+    "debugId": "3f2b8c1e-9d4a-4e7b-a6c5-1b2d3e4f5a6b"
   }
 }
 ```
@@ -170,7 +170,7 @@ All error responses use a consistent envelope (Microsoft structure with PayPal's
 | `error.message` | Yes | Human-readable explanation. May change between versions. |
 | `error.target` | No | Field or parameter name that caused the error. |
 | `error.details` | No | Array of sub-errors for multi-field validation failures. |
-| `error.debugId` | Yes | Opaque ID for support tracing. Correlates to server logs. |
+| `error.debugId` | Yes | Opaque ID for support tracing. Equals the `Request-Id` response header (§13.1) and the `requestId` field in server logs. |
 
 - Include `X-Error-Code: INSUFFICIENT_FUNDS` as a response header matching `error.code`.
 - Validation errors that affect multiple fields return a single `400` with all failing fields in `error.details`.
