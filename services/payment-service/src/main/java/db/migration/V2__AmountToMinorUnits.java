@@ -9,6 +9,8 @@ import java.util.Currency;
 /** Converts payments.amount from NUMERIC(19,4) to BIGINT minor units. Fails loudly on inexact rows. */
 public class V2__AmountToMinorUnits extends BaseJavaMigration {
 
+    private static final long MAX_MINOR_UNITS = 99_999_999L;
+
     @Override
     public void migrate(Context context) throws Exception {
         Connection conn = context.getConnection();
@@ -24,8 +26,7 @@ public class V2__AmountToMinorUnits extends BaseJavaMigration {
                 BigDecimal amount = rs.getBigDecimal("amount");
                 String currencyCode = rs.getString("currency_code");
 
-                Currency currency = Currency.getInstance(currencyCode);
-                int exponent = currency.getDefaultFractionDigits();
+                int exponent = currencyExponent(id, currencyCode);
                 BigDecimal multiplier = BigDecimal.TEN.pow(exponent);
                 BigDecimal minorUnits = amount.multiply(multiplier);
 
@@ -35,9 +36,16 @@ public class V2__AmountToMinorUnits extends BaseJavaMigration {
                             " " + currencyCode + " does not convert exactly to minor units");
                 }
 
+                long minorUnitsLong = minorUnits.longValueExact();
+                if (minorUnitsLong > MAX_MINOR_UNITS) {
+                    throw new RuntimeException(
+                            "Amount for payment " + id + " exceeds maximum of " + MAX_MINOR_UNITS +
+                            " minor units (got " + minorUnitsLong + ")");
+                }
+
                 try (PreparedStatement upd = conn.prepareStatement(
                         "UPDATE payments SET amount_minor_units = ? WHERE id = ?::uuid")) {
-                    upd.setLong(1, minorUnits.longValueExact());
+                    upd.setLong(1, minorUnitsLong);
                     upd.setString(2, id);
                     upd.executeUpdate();
                 }
@@ -51,5 +59,21 @@ public class V2__AmountToMinorUnits extends BaseJavaMigration {
             stmt.execute("ALTER TABLE payments ALTER COLUMN amount SET NOT NULL");
             stmt.execute("ALTER TABLE payments ADD CONSTRAINT chk_payments_amount_positive CHECK (amount > 0)");
         }
+    }
+
+    private static int currencyExponent(String paymentId, String currencyCode) {
+        Currency currency;
+        try {
+            currency = Currency.getInstance(currencyCode);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException(
+                    "Unknown currency code '" + currencyCode + "' for payment " + paymentId);
+        }
+        int exponent = currency.getDefaultFractionDigits();
+        if (exponent == -1) {
+            throw new RuntimeException(
+                    "Currency '" + currencyCode + "' has no minor unit definition for payment " + paymentId);
+        }
+        return exponent;
     }
 }

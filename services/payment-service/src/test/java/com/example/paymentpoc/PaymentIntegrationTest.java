@@ -324,8 +324,9 @@ class PaymentIntegrationTest {
 
     @Test
     void jpy_zero_exponent_round_trip() throws Exception {
+        UUID jpyOwner = UUID.randomUUID();
         MvcResult result = mockMvc.perform(post("/v1/payments")
-                        .with(writeJwt(OWNER_ID))
+                        .with(writeJwt(jpyOwner))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amount\":500,\"currency\":\"JPY\"}"))
@@ -336,16 +337,23 @@ class PaymentIntegrationTest {
 
         String paymentId = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
 
-        mockMvc.perform(get("/v1/payments/{id}", paymentId).with(readJwt(OWNER_ID)))
+        mockMvc.perform(get("/v1/payments/{id}", paymentId).with(readJwt(jpyOwner)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.amount").value(500))
                 .andExpect(jsonPath("$.currency").value("JPY"));
+
+        // List also returns integer amount for JPY
+        mockMvc.perform(get("/v1/payments").with(readJwt(jpyOwner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].amount").value(500))
+                .andExpect(jsonPath("$.items[0].currency").value("JPY"));
     }
 
     @Test
     void kwd_three_exponent_round_trip() throws Exception {
+        UUID kwdOwner = UUID.randomUUID();
         MvcResult result = mockMvc.perform(post("/v1/payments")
-                        .with(writeJwt(OWNER_ID))
+                        .with(writeJwt(kwdOwner))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amount\":10500,\"currency\":\"KWD\"}"))
@@ -356,10 +364,16 @@ class PaymentIntegrationTest {
 
         String paymentId = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
 
-        mockMvc.perform(get("/v1/payments/{id}", paymentId).with(readJwt(OWNER_ID)))
+        mockMvc.perform(get("/v1/payments/{id}", paymentId).with(readJwt(kwdOwner)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.amount").value(10500))
                 .andExpect(jsonPath("$.currency").value("KWD"));
+
+        // List also returns integer amount for KWD
+        mockMvc.perform(get("/v1/payments").with(readJwt(kwdOwner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].amount").value(10500))
+                .andExpect(jsonPath("$.items[0].currency").value("KWD"));
     }
 
     @Test

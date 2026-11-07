@@ -20,7 +20,7 @@ Where the two standards conflict, the choice made for this project is shown in t
 | **Error body** | `{"error": {"code", "message", "target", "details", "innererror"}}` | `{"name", "message", "details", "debug_id", "links"}` | Microsoft envelope with `debugId` | The Microsoft shape nests cleanly and is better for tooling; `debugId` is kept from PayPal for support traceability. |
 | **Pagination** | `{"value": [...], "nextLink": "..."}` | `{"items": [...], "links": [...]}` | Cursor-based with `items` + `nextCursor` + `links` | Cursor pagination is adopted from both; response field names follow PayPal convention (`items`) since `value` is ambiguous. |
 | **Idempotency header** | `Repeatability-Request-ID` + `Repeatability-First-Sent` | `PayPal-Request-Id` | `Idempotency-Key` | A single UUID header is simpler for clients. `Idempotency-Key` is widely understood (also used by Stripe) and avoids a PayPal-branded name in a generic service. |
-| **Money format** | No specific guidance | String with separate `currency_code` | String `amount` + `currency` (ISO 4217) | Avoids floating-point precision loss; follows PayPal's payment API convention. |
+| **Money format** | No specific guidance | String with separate `currency_code` | Integer minor units `amount` + `currency` (ISO 4217); follows Stripe's convention (§13.4) | Integer minor units avoid floating-point precision loss and are unambiguous across currencies with different decimal places (JPY has 0, KWD has 3). |
 | **HATEOAS** | Not required | Required `links` array on every resource | Required | HATEOAS improves discoverability. Links help clients navigate next states without constructing URLs. |
 
 ---
@@ -101,7 +101,7 @@ The service root (e.g. `/payments`) is a gateway concern — services bind at `/
 - All request and response bodies are **JSON** (`Content-Type: application/json`).
 - JSON field names use **camelCase**: `paymentId`, `createdAt`, `amount`.
 - Timestamps use **ISO 8601 / RFC 3339** in UTC: `"2024-03-15T10:30:00Z"`.
-- Monetary amounts are **strings** to avoid floating-point precision issues: `"amount": "19.99"`. Always include `currency` (ISO 4217 code).
+- Monetary amounts are **integers in minor units** (§13.4): `"amount": 1999`. Always include `currency` (ISO 4217 code). Never use a decimal or string for `amount`; the receiver must reject float tokens (e.g. `500.0`) with 400.
 - Enums are **SCREAMING_SNAKE_CASE** strings: `"status": "PENDING_APPROVAL"`.
 - Do not return `null` fields. Omit optional fields that have no value.
 - Boolean fields are named affirmatively: `isRefundable`, not `notRefundable`.
@@ -114,7 +114,7 @@ The service root (e.g. `/payments`) is a gateway concern — services bind at `/
   "createdAt": "2024-03-15T10:30:00Z",
   "updatedAt": "2024-03-15T10:30:05Z",
   "status": "CAPTURED",
-  "amount": "49.99",
+  "amount": 4999,
   "currency": "USD",
   "links": [
     { "rel": "self",    "href": "/v1/payments/pay_8f3a2b1c", "method": "GET" },
@@ -155,7 +155,7 @@ All error responses use a consistent envelope (Microsoft structure with PayPal's
     "details": [
       {
         "code": "BALANCE_TOO_LOW",
-        "message": "Available balance is 10.00 USD; requested 49.99 USD.",
+        "message": "Available balance is 1000 USD minor units; requested 4999 USD minor units.",
         "target": "amount"
       }
     ],
@@ -285,17 +285,34 @@ Payment-type resources may accept a `metadata` object of string key/value pairs 
 
 ([Stripe: metadata](https://docs.stripe.com/api/metadata))
 
-### 13.4 Payment lifecycle
+### 13.4 Amounts in minor units
+
+All monetary amounts are represented as **integers in minor units** — the smallest denomination of the currency — with a separate ISO 4217 `currency` field. This is Stripe's convention and eliminates floating-point ambiguity. ([Stripe: currencies](https://docs.stripe.com/currencies#zero-decimal))
+
+| Currency | Exponent | Example: "ten dollars/yen/dinars" |
+|----------|----------|-----------------------------------|
+| USD, EUR, GBP | 2 (100 minor units = 1 major unit) | `{"amount": 1000, "currency": "USD"}` |
+| JPY | 0 (1 minor unit = 1 yen) | `{"amount": 10, "currency": "JPY"}` |
+| KWD | 3 (1000 fils = 1 KWD) | `{"amount": 10000, "currency": "KWD"}` |
+
+Rules:
+
+- Maximum `amount`: `99999999` minor units per request.
+- Currency must be a known ISO 4217 code with a defined exponent. Currencies with no minor-unit definition (e.g. `XAU`, precious metals) are rejected with `400 VALIDATION_ERROR, target=currency`.
+- Clients **must** send `amount` as a JSON integer. Decimal-point tokens (`500.0`) and string tokens (`"500"`) are rejected with `400`.
+- The exponent is looked up from `java.util.Currency.getInstance(code).getDefaultFractionDigits()` at the service layer; it is never trusted from the client.
+
+### 13.5 Payment lifecycle
 
 Model payments as an explicit state machine (see `PaymentStatus`), and design new payment flows with these Stripe lessons in mind:
 
 - Real payments are asynchronous. Plan for in-between states such as "processing" and "requires customer action" (e.g. 3-D Secure), instead of assuming one call ends in success or failure.
 - Keep **authorization** and **capture** separate when funds are held before being taken (Stripe's `capture_method=manual` and `requires_capture` status).
-- Clients must not infer the outcome from the HTTP status alone. They read the resource's `status` field, or listen for events (§13.5).
+- Clients must not infer the outcome from the HTTP status alone. They read the resource's `status` field, or listen for events (§13.6).
 
 ([Stripe: PaymentIntent object](https://docs.stripe.com/api/payment_intents/object))
 
-### 13.5 Events and webhooks (for future outbound notifications)
+### 13.6 Events and webhooks (for future outbound notifications)
 
 When a service notifies other systems of changes, it uses events:
 
@@ -306,7 +323,7 @@ When a service notifies other systems of changes, it uses events:
 
 ([Stripe: webhooks](https://docs.stripe.com/webhooks), [event object](https://docs.stripe.com/api/events/object))
 
-### 13.6 Stripe patterns we deliberately do not follow
+### 13.7 Stripe patterns we deliberately do not follow
 
 | Stripe | Ours | Why |
 |---|---|---|
