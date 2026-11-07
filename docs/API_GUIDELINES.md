@@ -1,10 +1,11 @@
 # API Guidelines
 
-This document defines the REST API design standards for all services in the `payment-poc` monorepo. These guidelines are derived from and aligned with two industry-published standards:
+This document defines the REST API design standards for all services in the `payment-poc` monorepo. These guidelines are derived from and aligned with two industry-published standards, plus payment-specific patterns from Stripe's API:
 
 - **Microsoft Azure REST API Guidelines** — https://github.com/microsoft/api-guidelines/blob/vNext/azure/Guidelines.md  
   (also: [Graph guidelines](https://github.com/microsoft/api-guidelines/blob/vNext/graph/GuidelinesGraph.md), [repo root](https://github.com/microsoft/api-guidelines))
 - **PayPal REST API Style Guide** — [archived](https://web.archive.org/web/20220114091735/https://github.com/paypal/api-standards/blob/master/api-style-guide.md) · [PayPal Tech blog](https://medium.com/paypal-tech/api-style-guide-and-patterns-the-evolutionary-journey-continues-bb2bad7a87ee)
+- **Stripe API reference** (payment-specific patterns, see §13) — https://docs.stripe.com/api
 
 ---
 
@@ -208,6 +209,11 @@ All collection endpoints **must** support pagination. Never return an unbounded 
 - The server caches the response for the same key for a minimum of 24 hours.
 - A duplicate request with the same key returns the **original cached response with its original status code** — `201 Created` for a successful creation, not `200 OK`.
 - If the same key is used with a different request body, return `409 Conflict`.
+- Keys are **scoped to the caller** (`ownerId` + key). One caller's key never returns another caller's response.
+- Key length: at most 255 characters. Keys must be random (UUID v4 recommended) and must never contain PII such as emails.
+- A second request that arrives while the first one with the same key is still running returns `409 Conflict`; the client may retry it later.
+- Requests rejected by validation (`400`) are **not** stored, so the client can fix the request and retry with the same key.
+- Idempotency keys apply to `POST` only in our services today; sending one on `GET` or `DELETE` has no effect.
 
 ```
 POST /v1/payments
@@ -247,3 +253,65 @@ GET /v1/payments?q=john
 - Use `springdoc-openapi` to generate the spec from annotations.
 - Each endpoint documents: summary, description, all request parameters, request body schema, all response codes and body schemas, and security requirements.
 - Include example values for all fields in the schema.
+
+---
+
+## 13. Payment Patterns Adopted from Stripe
+
+Stripe's API is the most widely used payments API, so we reuse its proven patterns where they fit our Microsoft/PayPal-based conventions. Source pages are linked per item.
+
+### 13.1 Request IDs
+
+- Every response carries a `Request-Id` header, equal to the `debugId` used in error bodies and logs. Clients quote it when reporting problems. ([Stripe: request IDs](https://docs.stripe.com/api/request_ids))
+
+### 13.2 Error body extras
+
+Our error envelope (§7) stays as is. For payment errors, two optional fields may be added inside `error`:
+
+| Field | When | Example |
+|---|---|---|
+| `declineCode` | A payment processor declined the payment; carries the processor's reason, never shown raw to end users | `"insufficient_funds"` |
+| `docUrl` | A public doc explains the `code` | `"https://docs.example.com/errors/INVALID_PAYMENT_STATE"` |
+
+([Stripe: errors](https://docs.stripe.com/api/errors))
+
+### 13.3 Metadata
+
+Payment-type resources may accept a `metadata` object of string key/value pairs for the client's own references (e.g. order ID):
+
+- At most 50 keys; keys up to 40 characters; values up to 500 characters; no `[` or `]` in keys.
+- Metadata is stored and returned as-is, never interpreted by the service.
+- **Never** put card numbers, bank details or other sensitive data in metadata.
+
+([Stripe: metadata](https://docs.stripe.com/api/metadata))
+
+### 13.4 Payment lifecycle
+
+Model payments as an explicit state machine (see `PaymentStatus`), and design new payment flows with these Stripe lessons in mind:
+
+- Real payments are asynchronous. Plan for in-between states such as "processing" and "requires customer action" (e.g. 3-D Secure), instead of assuming one call ends in success or failure.
+- Keep **authorization** and **capture** separate when funds are held before being taken (Stripe's `capture_method=manual` and `requires_capture` status).
+- Clients must not infer the outcome from the HTTP status alone. They read the resource's `status` field, or listen for events (§13.5).
+
+([Stripe: PaymentIntent object](https://docs.stripe.com/api/payment_intents/object))
+
+### 13.5 Events and webhooks (for future outbound notifications)
+
+When a service notifies other systems of changes, it uses events:
+
+- **Event shape:** `{ "id", "type", "createdAt", "apiVersion", "data": { "object": { ...resource } } }`, with `type` such as `payment.cancelled`.
+- **Signing:** each delivery carries a signature header with a timestamp and an HMAC-SHA256 of `timestamp + "." + rawBody`. Receivers verify it on the raw body and reject timestamps older than 5 minutes.
+- **Delivery:** at-least-once, with exponential backoff retries for up to 3 days. Any non-2xx response counts as a failure.
+- **Receivers** must deduplicate by event `id`, must not rely on delivery order, and should return 2xx quickly and process asynchronously.
+
+([Stripe: webhooks](https://docs.stripe.com/webhooks), [event object](https://docs.stripe.com/api/events/object))
+
+### 13.6 Stripe patterns we deliberately do not follow
+
+| Stripe | Ours | Why |
+|---|---|---|
+| Date-based version header (`Stripe-Version: 2026-10-28.endive`) | Path version `/v1` (§2) | Simpler to route and test; we don't run Stripe-scale parallel versions. |
+| `snake_case` fields, lowercase currency (`"usd"`) | `camelCase`, uppercase ISO 4217 (`"USD"`) | Consistent with §5 and Jackson defaults. |
+| List shape `{object:"list", data, has_more}`; `starting_after` object-ID cursors, default page size 10 | `{items, nextCursor, links}`; opaque cursor, default 20 (§8) | Opaque cursors let us change sort keys without breaking clients. |
+| `expand[]` to inline related objects | Not supported | Not needed at POC scale; adds query complexity. |
+| Prefixed IDs (`pi_...`) and an `object` type field | Plain UUIDs | Optional nicety; revisit if we expose many resource types. |
