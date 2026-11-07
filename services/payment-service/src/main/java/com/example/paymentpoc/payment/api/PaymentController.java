@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
@@ -100,8 +101,9 @@ public class PaymentController {
         return ResponseEntity.ok(PaymentResponse.from(result));
     }
 
+    /** Reads the granted authorities, which Spring builds from the space-delimited {@code scope} claim. */
     private static boolean isAdmin(Jwt jwt) {
-        var authorities = jwt.getClaimAsStringList("scope");
-        return authorities != null && authorities.contains("payments:admin");
+        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> "SCOPE_payments:admin".equals(a.getAuthority()));
     }
 }
