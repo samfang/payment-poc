@@ -4,6 +4,7 @@ import com.example.paymentpoc.payment.application.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,7 @@ public class PaymentController {
     private final PaymentService paymentService;
     private final IdempotencyStore idempotencyStore;
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:write')")
     @PostMapping
     public ResponseEntity<PaymentResponse> createPayment(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
@@ -52,6 +54,7 @@ public class PaymentController {
         }
     }
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:read') or hasAuthority('SCOPE_payments:admin')")
     @GetMapping("/{id}")
     public ResponseEntity<PaymentResponse> getPayment(
             @PathVariable UUID id,
@@ -62,6 +65,7 @@ public class PaymentController {
         return ResponseEntity.ok(PaymentResponse.from(result));
     }
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:read') or hasAuthority('SCOPE_payments:admin')")
     @GetMapping
     public ResponseEntity<PaymentListResponse> listPayments(
             @RequestParam(required = false) String cursor,
@@ -83,6 +87,7 @@ public class PaymentController {
         return ResponseEntity.ok(PaymentListResponse.from(result, selfUrl));
     }
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:write')")
     @PostMapping("/{id}/cancel")
     public ResponseEntity<PaymentResponse> cancelPayment(
             @PathVariable UUID id,
