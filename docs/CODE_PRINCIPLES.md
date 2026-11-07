@@ -25,7 +25,7 @@ com.example.paymentpoc/
 | Layer | Allowed dependencies | Must not import |
 |---|---|---|
 | `domain` | Java stdlib, your own value types | Spring, JPA, Hibernate, Jackson |
-| `application` | `domain`, `shared/exception` | `api`, `infrastructure`, Spring MVC |
+| `application` | `domain`, `shared/exception` | `api`, `infrastructure`, Spring MVC — services return application-level result objects; `api` maps them to response DTOs |
 | `infrastructure` | `domain`, JPA/Spring Data | `api`, `application` |
 | `api` | `application` (via interface), `shared/exception`, Jackson | `domain` directly, `infrastructure` |
 | `shared` | Spring, any framework | Feature packages |
@@ -35,7 +35,7 @@ com.example.paymentpoc/
 - Each layer has a `package-info.java` with a one-sentence description of its role.
 - Entities and Spring Data repository implementations belong in `infrastructure`; the domain holds only a repository interface (`PaymentRepository`) with no Spring or JPA annotations.
 - Controllers (`api`) receive and return DTOs only — never expose domain model objects in responses.
-- Services (`application`) receive and return DTOs or domain value types — never `HttpServletRequest` or Spring MVC types.
+- Services (`application`) return application-level result objects (plain Java records or classes in the `application` package). The `api` layer maps these to response DTOs. Services never return raw domain entities or accept Spring MVC types.
 - One feature package per domain context (e.g. `payment`, `account`). Do not mix concerns across feature packages.
 
 ---
@@ -88,7 +88,7 @@ Write the test first. All features begin with a failing test.
 
 - Use **Spring Data JPA** (`JpaRepository`) for all CRUD and standard queries.
 - Complex queries use `@Query` with JPQL (preferred) or native SQL when JPQL is insufficient.
-- Apply pagination via `Pageable` / `Page<T>` for all list endpoints; never return an unbounded list.
+- Apply **keyset (cursor) pagination** for all list endpoints — never return an unbounded list and avoid offset-based `Pageable`/`Page<T>` (which issues a costly `COUNT` query). Fetch `pageSize + 1` rows with a keyset predicate (`WHERE id > :cursor`) using a `Slice<T>` or a plain `List<T>`. The extra row signals whether a next page exists; drop it before returning the response.
 - Apply `@Transactional` at the `application` (service) layer, not the `infrastructure` layer.
 - Keep database column names in `snake_case` via `@Column(name = "...")` mapping; Java field names stay `camelCase`.
 
