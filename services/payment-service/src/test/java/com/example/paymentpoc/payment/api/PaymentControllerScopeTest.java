@@ -1,6 +1,8 @@
 package com.example.paymentpoc.payment.api;
 
 import com.example.paymentpoc.payment.application.*;
+import com.example.paymentpoc.shared.config.ApiAccessDeniedHandler;
+import com.example.paymentpoc.shared.config.ApiAuthenticationEntryPoint;
 import com.example.paymentpoc.shared.config.SecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * These tests fail until @PreAuthorize annotations are added to PaymentController.
  */
 @WebMvcTest(PaymentController.class)
-@Import({IdempotencyStore.class, SecurityConfig.class})
+@Import({IdempotencyStore.class, SecurityConfig.class, ApiAuthenticationEntryPoint.class, ApiAccessDeniedHandler.class})
 class PaymentControllerScopeTest {
 
     @Autowired

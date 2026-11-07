@@ -1,6 +1,8 @@
 package com.example.paymentpoc.payment.api;
 
 import com.example.paymentpoc.payment.application.PaymentService;
+import com.example.paymentpoc.shared.config.ApiAccessDeniedHandler;
+import com.example.paymentpoc.shared.config.ApiAuthenticationEntryPoint;
 import com.example.paymentpoc.shared.config.SecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * are wired into SecurityConfig.
  */
 @WebMvcTest(PaymentController.class)
-@Import({IdempotencyStore.class, SecurityConfig.class})
+@Import({IdempotencyStore.class, SecurityConfig.class, ApiAuthenticationEntryPoint.class, ApiAccessDeniedHandler.class})
 class PaymentControllerAuthErrorTest {
 
     @Autowired

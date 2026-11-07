@@ -1,5 +1,7 @@
 package com.example.paymentpoc.payment.api;
 
+import com.example.paymentpoc.shared.config.ApiAccessDeniedHandler;
+import com.example.paymentpoc.shared.config.ApiAuthenticationEntryPoint;
 import com.example.paymentpoc.shared.config.SecurityConfig;
 
 import com.example.paymentpoc.payment.application.*;
@@ -27,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PaymentController.class)
-@Import({IdempotencyStore.class, SecurityConfig.class})
+@Import({IdempotencyStore.class, SecurityConfig.class, ApiAuthenticationEntryPoint.class, ApiAccessDeniedHandler.class})
 class PaymentControllerTest {
 
     @Autowired
