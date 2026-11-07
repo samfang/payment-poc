@@ -155,7 +155,7 @@ All error responses use a consistent envelope (Microsoft structure with PayPal's
     "details": [
       {
         "code": "BALANCE_TOO_LOW",
-        "message": "Available balance is 1000 USD minor units; requested 4999 USD minor units.",
+        "message": "Available balance is 10.00 USD; requested 49.99 USD.",
         "target": "amount"
       }
     ],
