@@ -3,6 +3,9 @@ package com.example.paymentpoc;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -23,9 +26,17 @@ class PaymentApplicationTests {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        // Use a static test JWT issuer (no live IdP needed in CI)
-        registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri",
-                () -> "http://test-issuer");
+    }
+
+    @TestConfiguration
+    static class SecurityTestConfig {
+        /** Replace the JWT decoder so the context does not need a live IdP. */
+        @Bean
+        JwtDecoder jwtDecoder() {
+            return token -> {
+                throw new UnsupportedOperationException("No JWT validation in smoke test");
+            };
+        }
     }
 
     @Test

@@ -1,4 +1,4 @@
-package com.example.paymentpoc.exception;
+package com.example.paymentpoc.shared.exception;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;

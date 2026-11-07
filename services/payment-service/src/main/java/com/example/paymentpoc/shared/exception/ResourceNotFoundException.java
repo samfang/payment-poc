@@ -1,4 +1,4 @@
-package com.example.paymentpoc.exception;
+package com.example.paymentpoc.shared.exception;
 
 public class ResourceNotFoundException extends RuntimeException {
 

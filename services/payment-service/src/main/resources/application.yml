@@ -17,7 +17,7 @@ spring:
         format_sql: false
 
   flyway:
-    enabled: true
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
     locations: classpath:db/migration
 
   security:
@@ -38,10 +38,8 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-
-logging:
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"
+      probes:
+        enabled: true
 
 springdoc:
   api-docs:

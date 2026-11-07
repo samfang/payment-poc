@@ -1,4 +1,4 @@
-package com.example.paymentpoc.exception;
+package com.example.paymentpoc.shared.exception;
 
 import java.util.List;
 import java.util.UUID;

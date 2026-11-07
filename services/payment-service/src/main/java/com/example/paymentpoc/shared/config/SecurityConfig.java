@@ -1,4 +1,4 @@
-package com.example.paymentpoc.config;
+package com.example.paymentpoc.shared.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
