@@ -18,4 +18,10 @@ public interface PaymentRepository {
      * Pass nulls for the first page.
      */
     List<Payment> findByOwner(UUID ownerId, Instant afterCreatedAt, UUID afterId, int limit);
+
+    /**
+     * Returns up to {@code limit} payments across ALL owners, ordered by (createdAt, id) ascending.
+     * Used for admin queries. Pass nulls for the first page.
+     */
+    List<Payment> findAll(Instant afterCreatedAt, UUID afterId, int limit);
 }

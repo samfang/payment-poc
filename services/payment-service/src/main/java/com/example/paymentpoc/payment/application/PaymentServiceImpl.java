@@ -29,21 +29,29 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional(readOnly = true)
-    public PaymentResult get(UUID id, UUID ownerId) {
-        Payment payment = findOwnedOrThrow(id, ownerId);
-        return PaymentResult.from(payment);
+    public PaymentResult get(UUID id, UUID callerId, boolean isAdmin) {
+        return PaymentResult.from(findOrThrow(id, callerId, isAdmin));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PaymentListResult list(UUID ownerId, String cursor, int pageSize) {
+    public PaymentListResult list(UUID callerId, boolean isAdmin, String cursor, int pageSize) {
         int fetchSize = pageSize + 1;
         CursorPosition pos = cursor != null ? CursorPosition.decode(cursor) : null;
-        List<Payment> fetched = paymentRepository.findByOwner(
-                ownerId,
-                pos != null ? pos.createdAt() : null,
-                pos != null ? pos.id() : null,
-                fetchSize);
+
+        List<Payment> fetched;
+        if (isAdmin) {
+            fetched = paymentRepository.findAll(
+                    pos != null ? pos.createdAt() : null,
+                    pos != null ? pos.id() : null,
+                    fetchSize);
+        } else {
+            fetched = paymentRepository.findByOwner(
+                    callerId,
+                    pos != null ? pos.createdAt() : null,
+                    pos != null ? pos.id() : null,
+                    fetchSize);
+        }
 
         boolean hasMore = fetched.size() > pageSize;
         List<Payment> page = hasMore ? fetched.subList(0, pageSize) : fetched;
@@ -59,15 +67,15 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public PaymentResult cancel(UUID id, UUID ownerId) {
-        Payment payment = findOwnedOrThrow(id, ownerId);
+    public PaymentResult cancel(UUID id, UUID callerId, boolean isAdmin) {
+        Payment payment = findOrThrow(id, callerId, isAdmin);
         payment.cancel();
         return PaymentResult.from(paymentRepository.save(payment));
     }
 
-    private Payment findOwnedOrThrow(UUID id, UUID ownerId) {
+    private Payment findOrThrow(UUID id, UUID callerId, boolean isAdmin) {
         return paymentRepository.findById(id)
-                .filter(p -> p.ownerId().equals(ownerId))
+                .filter(p -> isAdmin || p.ownerId().equals(callerId))
                 .orElseThrow(() -> new ResourceNotFoundException("Payment", id.toString()));
     }
 

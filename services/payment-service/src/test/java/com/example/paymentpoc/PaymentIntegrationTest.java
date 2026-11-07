@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import java.util.List;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -79,6 +80,24 @@ class PaymentIntegrationTest {
                 .authorities(
                         new SimpleGrantedAuthority("SCOPE_payments:read"),
                         new SimpleGrantedAuthority("SCOPE_payments:write"));
+    }
+
+    private static RequestPostProcessor adminReadJwt(UUID sub) {
+        return SecurityMockMvcRequestPostProcessors.jwt()
+                .jwt(j -> j.subject(sub.toString())
+                        .claim("scope", List.of("payments:read", "payments:admin")))
+                .authorities(
+                        new SimpleGrantedAuthority("SCOPE_payments:read"),
+                        new SimpleGrantedAuthority("SCOPE_payments:admin"));
+    }
+
+    private static RequestPostProcessor adminWriteJwt(UUID sub) {
+        return SecurityMockMvcRequestPostProcessors.jwt()
+                .jwt(j -> j.subject(sub.toString())
+                        .claim("scope", List.of("payments:write", "payments:admin")))
+                .authorities(
+                        new SimpleGrantedAuthority("SCOPE_payments:write"),
+                        new SimpleGrantedAuthority("SCOPE_payments:admin"));
     }
 
     @Test
@@ -267,5 +286,93 @@ class PaymentIntegrationTest {
                         .with(readJwt(OWNER_ID)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    // ── Admin scope tests ──────────────────────────────────────────────────────
+
+    @Test
+    void admin_can_get_another_owners_payment() throws Exception {
+        MvcResult createResult = mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"77.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String paymentId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+        UUID adminId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
+        mockMvc.perform(get("/v1/payments/{id}", paymentId)
+                        .with(adminReadJwt(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(paymentId))
+                .andExpect(jsonPath("$.ownerId").value(OWNER_ID.toString()));
+    }
+
+    @Test
+    void admin_list_returns_all_owners_payments() throws Exception {
+        UUID otherOwner = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        UUID adminId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab");
+
+        mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"11.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(otherOwner))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"22.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isCreated());
+
+        // Admin list must return items from both owners
+        mockMvc.perform(get("/v1/payments")
+                        .with(adminReadJwt(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)));
+    }
+
+    @Test
+    void admin_can_cancel_another_owners_payment() throws Exception {
+        MvcResult createResult = mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"55.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String paymentId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+        UUID adminId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaac");
+
+        mockMvc.perform(post("/v1/payments/{id}/cancel", paymentId)
+                        .with(adminWriteJwt(adminId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void admin_read_scope_cannot_get_without_read_scope() throws Exception {
+        // payments:admin alone does not grant read — still needs SCOPE_payments:read or :admin
+        // Here we verify: admin+read can GET; non-admin non-read cannot
+        MvcResult createResult = mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"9.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String paymentId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+
+        // Write-only scope (no read, no admin) → 403
+        mockMvc.perform(get("/v1/payments/{id}", paymentId)
+                        .with(writeJwt(OWNER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
     }
 }

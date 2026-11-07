@@ -46,7 +46,7 @@ class PaymentServiceImplTest {
         Payment payment = Payment.create(OWNER_ID, MONEY);
         when(paymentRepository.findById(payment.id())).thenReturn(Optional.of(payment));
 
-        PaymentResult result = paymentService.get(payment.id(), OWNER_ID);
+        PaymentResult result = paymentService.get(payment.id(), OWNER_ID, false);
 
         assertThat(result.id()).isEqualTo(payment.id());
     }
@@ -56,7 +56,7 @@ class PaymentServiceImplTest {
         UUID unknownId = UUID.randomUUID();
         when(paymentRepository.findById(unknownId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> paymentService.get(unknownId, OWNER_ID))
+        assertThatThrownBy(() -> paymentService.get(unknownId, OWNER_ID, false))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -65,7 +65,7 @@ class PaymentServiceImplTest {
         Payment payment = Payment.create(OWNER_ID, MONEY);
         when(paymentRepository.findById(payment.id())).thenReturn(Optional.of(payment));
 
-        assertThatThrownBy(() -> paymentService.get(payment.id(), UUID.randomUUID()))
+        assertThatThrownBy(() -> paymentService.get(payment.id(), UUID.randomUUID(), false))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -75,7 +75,7 @@ class PaymentServiceImplTest {
         when(paymentRepository.findByOwner(eq(OWNER_ID), isNull(), isNull(), eq(21)))
                 .thenReturn(payments);
 
-        PaymentListResult result = paymentService.list(OWNER_ID, null, 20);
+        PaymentListResult result = paymentService.list(OWNER_ID, false, null, 20);
 
         assertThat(result.items()).hasSize(1);
         assertThat(result.nextCursor()).isNull();
@@ -89,7 +89,7 @@ class PaymentServiceImplTest {
         when(paymentRepository.findByOwner(eq(OWNER_ID), isNull(), isNull(), eq(2)))
                 .thenReturn(payments);
 
-        PaymentListResult result = paymentService.list(OWNER_ID, null, 1);
+        PaymentListResult result = paymentService.list(OWNER_ID, false, null, 1);
 
         assertThat(result.items()).hasSize(1);
         assertThat(result.nextCursor()).isNotNull();
@@ -101,7 +101,7 @@ class PaymentServiceImplTest {
         when(paymentRepository.findById(payment.id())).thenReturn(Optional.of(payment));
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentResult result = paymentService.cancel(payment.id(), OWNER_ID);
+        PaymentResult result = paymentService.cancel(payment.id(), OWNER_ID, false);
 
         assertThat(result.status()).isEqualTo("CANCELLED");
         verify(paymentRepository).save(any(Payment.class));
@@ -113,7 +113,7 @@ class PaymentServiceImplTest {
                 PaymentStatus.COMPLETED, Instant.now(), Instant.now());
         when(paymentRepository.findById(payment.id())).thenReturn(Optional.of(payment));
 
-        assertThatThrownBy(() -> paymentService.cancel(payment.id(), OWNER_ID))
+        assertThatThrownBy(() -> paymentService.cancel(payment.id(), OWNER_ID, false))
                 .isInstanceOf(InvalidPaymentStateException.class);
     }
 
@@ -123,7 +123,7 @@ class PaymentServiceImplTest {
                 PaymentStatus.CANCELLED, Instant.now(), Instant.now());
         when(paymentRepository.findById(payment.id())).thenReturn(Optional.of(payment));
 
-        assertThatThrownBy(() -> paymentService.cancel(payment.id(), OWNER_ID))
+        assertThatThrownBy(() -> paymentService.cancel(payment.id(), OWNER_ID, false))
                 .isInstanceOf(InvalidPaymentStateException.class);
     }
 }

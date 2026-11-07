@@ -60,8 +60,9 @@ public class PaymentController {
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
 
-        UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentResult result = paymentService.get(id, ownerId);
+        UUID callerId = UUID.fromString(jwt.getSubject());
+        boolean isAdmin = isAdmin(jwt);
+        PaymentResult result = paymentService.get(id, callerId, isAdmin);
         return ResponseEntity.ok(PaymentResponse.from(result));
     }
 
@@ -77,10 +78,10 @@ public class PaymentController {
                     "pageSize must be between 1 and " + MAX_PAGE_SIZE + ", got: " + pageSize);
         }
 
-        UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentListResult result = paymentService.list(ownerId, cursor, pageSize);
+        UUID callerId = UUID.fromString(jwt.getSubject());
+        boolean isAdmin = isAdmin(jwt);
+        PaymentListResult result = paymentService.list(callerId, isAdmin, cursor, pageSize);
 
-        // Build self URL as an absolute path (no host), always including pageSize
         String selfUrl = "/v1/payments?pageSize=" + pageSize;
         if (cursor != null) selfUrl += "&cursor=" + cursor;
 
@@ -93,8 +94,14 @@ public class PaymentController {
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
 
-        UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentResult result = paymentService.cancel(id, ownerId);
+        UUID callerId = UUID.fromString(jwt.getSubject());
+        boolean isAdmin = isAdmin(jwt);
+        PaymentResult result = paymentService.cancel(id, callerId, isAdmin);
         return ResponseEntity.ok(PaymentResponse.from(result));
+    }
+
+    private static boolean isAdmin(Jwt jwt) {
+        var authorities = jwt.getClaimAsStringList("scope");
+        return authorities != null && authorities.contains("payments:admin");
     }
 }

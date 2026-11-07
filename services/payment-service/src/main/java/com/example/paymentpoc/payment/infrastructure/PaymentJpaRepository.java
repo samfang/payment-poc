@@ -32,4 +32,23 @@ interface PaymentJpaRepository extends JpaRepository<PaymentEntity, UUID> {
             @Param("afterCreatedAt") Instant afterCreatedAt,
             @Param("afterId") String afterId,
             @Param("limit") int limit);
+
+    @Query(value = """
+            SELECT * FROM payments
+            ORDER BY created_at ASC, id ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<PaymentEntity> findAllFirstPage(@Param("limit") int limit);
+
+    @Query(value = """
+            SELECT * FROM payments
+            WHERE created_at > :afterCreatedAt
+               OR (created_at = :afterCreatedAt AND id::text > :afterId)
+            ORDER BY created_at ASC, id ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<PaymentEntity> findAllNextPage(
+            @Param("afterCreatedAt") Instant afterCreatedAt,
+            @Param("afterId") String afterId,
+            @Param("limit") int limit);
 }

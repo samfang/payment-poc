@@ -232,7 +232,7 @@ class PaymentControllerTest {
 
     @Test
     void getPayment_returns_200_with_body() throws Exception {
-        when(paymentService.get(PAYMENT_ID, OWNER_ID)).thenReturn(createdResult());
+        when(paymentService.get(PAYMENT_ID, OWNER_ID, false)).thenReturn(createdResult());
 
         mockMvc.perform(get("/v1/payments/{id}", PAYMENT_ID)
                         .with(readJwt(OWNER_ID)))
@@ -251,7 +251,7 @@ class PaymentControllerTest {
 
     @Test
     void getPayment_unknown_returns_404() throws Exception {
-        when(paymentService.get(eq(PAYMENT_ID), any()))
+        when(paymentService.get(eq(PAYMENT_ID), any(), anyBoolean()))
                 .thenThrow(new ResourceNotFoundException("Payment", PAYMENT_ID.toString()));
 
         mockMvc.perform(get("/v1/payments/{id}", PAYMENT_ID)
@@ -265,7 +265,7 @@ class PaymentControllerTest {
     @Test
     void listPayments_returns_200_with_items_and_self_link() throws Exception {
         PaymentListResult listResult = new PaymentListResult(List.of(createdResult()), null);
-        when(paymentService.list(eq(OWNER_ID), isNull(), eq(20))).thenReturn(listResult);
+        when(paymentService.list(eq(OWNER_ID), eq(false), isNull(), eq(20))).thenReturn(listResult);
 
         mockMvc.perform(get("/v1/payments")
                         .with(readJwt(OWNER_ID)))
@@ -279,7 +279,7 @@ class PaymentControllerTest {
     @Test
     void listPayments_with_more_rows_includes_next_link() throws Exception {
         PaymentListResult listResult = new PaymentListResult(List.of(createdResult()), "nextCursorToken");
-        when(paymentService.list(eq(OWNER_ID), isNull(), eq(20))).thenReturn(listResult);
+        when(paymentService.list(eq(OWNER_ID), eq(false), isNull(), eq(20))).thenReturn(listResult);
 
         mockMvc.perform(get("/v1/payments")
                         .with(readJwt(OWNER_ID)))
@@ -290,7 +290,7 @@ class PaymentControllerTest {
 
     @Test
     void listPayments_invalid_cursor_returns_400() throws Exception {
-        when(paymentService.list(any(), eq("@@@"), anyInt()))
+        when(paymentService.list(any(), anyBoolean(), eq("@@@"), anyInt()))
                 .thenThrow(new com.example.paymentpoc.shared.exception.InvalidCursorException("@@@"));
 
         mockMvc.perform(get("/v1/payments?cursor=@@@")
@@ -311,7 +311,7 @@ class PaymentControllerTest {
 
     @Test
     void cancelPayment_CREATED_returns_200_with_CANCELLED_status() throws Exception {
-        when(paymentService.cancel(PAYMENT_ID, OWNER_ID)).thenReturn(cancelledResult());
+        when(paymentService.cancel(PAYMENT_ID, OWNER_ID, false)).thenReturn(cancelledResult());
 
         mockMvc.perform(post("/v1/payments/{id}/cancel", PAYMENT_ID)
                         .with(writeJwt(OWNER_ID)))
@@ -321,7 +321,7 @@ class PaymentControllerTest {
 
     @Test
     void cancelPayment_COMPLETED_returns_409_with_INVALID_PAYMENT_STATE() throws Exception {
-        when(paymentService.cancel(eq(PAYMENT_ID), any()))
+        when(paymentService.cancel(eq(PAYMENT_ID), any(), anyBoolean()))
                 .thenThrow(new InvalidPaymentStateException(PaymentStatus.COMPLETED));
 
         mockMvc.perform(post("/v1/payments/{id}/cancel", PAYMENT_ID)
@@ -333,7 +333,7 @@ class PaymentControllerTest {
 
     @Test
     void cancelPayment_CANCELLED_returns_409_with_INVALID_PAYMENT_STATE() throws Exception {
-        when(paymentService.cancel(eq(PAYMENT_ID), any()))
+        when(paymentService.cancel(eq(PAYMENT_ID), any(), anyBoolean()))
                 .thenThrow(new InvalidPaymentStateException(PaymentStatus.CANCELLED));
 
         mockMvc.perform(post("/v1/payments/{id}/cancel", PAYMENT_ID)

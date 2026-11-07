@@ -34,4 +34,14 @@ public class PaymentRepositoryImpl implements PaymentRepository {
         return jpa.findNextPage(ownerId, afterCreatedAt, afterId.toString(), limit).stream()
                 .map(PaymentEntity::toDomain).toList();
     }
+
+    @Override
+    public List<Payment> findAll(Instant afterCreatedAt, UUID afterId, int limit) {
+        if (afterCreatedAt == null) {
+            return jpa.findAllFirstPage(limit).stream()
+                    .map(PaymentEntity::toDomain).toList();
+        }
+        return jpa.findAllNextPage(afterCreatedAt, afterId.toString(), limit).stream()
+                .map(PaymentEntity::toDomain).toList();
+    }
 }
