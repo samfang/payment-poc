@@ -7,7 +7,7 @@ target/
 *.zip
 *.tar.gz
 *.rar
-.mvn/
+.mvn/*
 !.mvn/wrapper/
 !**/src/main/**/target/
 !**/src/test/**/target/
