@@ -6,9 +6,12 @@ public interface PaymentService {
 
     PaymentResult create(CreatePaymentCommand command);
 
-    PaymentResult get(UUID id, UUID ownerId);
+    /** Returns the payment. If {@code isAdmin} is true, skips the owner check. */
+    PaymentResult get(UUID id, UUID callerId, boolean isAdmin);
 
-    PaymentListResult list(UUID ownerId, String cursor, int pageSize);
+    /** Lists payments. If {@code isAdmin} is true, returns all owners' payments unfiltered. */
+    PaymentListResult list(UUID callerId, boolean isAdmin, String cursor, int pageSize);
 
-    PaymentResult cancel(UUID id, UUID ownerId);
+    /** Cancels the payment. If {@code isAdmin} is true, skips the owner check. */
+    PaymentResult cancel(UUID id, UUID callerId, boolean isAdmin);
 }

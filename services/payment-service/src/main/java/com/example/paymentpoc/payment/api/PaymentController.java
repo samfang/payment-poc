@@ -4,7 +4,9 @@ import com.example.paymentpoc.payment.application.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
@@ -21,6 +23,7 @@ public class PaymentController {
     private final PaymentService paymentService;
     private final IdempotencyStore idempotencyStore;
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:write')")
     @PostMapping
     public ResponseEntity<PaymentResponse> createPayment(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
@@ -52,16 +55,19 @@ public class PaymentController {
         }
     }
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:read')")
     @GetMapping("/{id}")
     public ResponseEntity<PaymentResponse> getPayment(
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
 
-        UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentResult result = paymentService.get(id, ownerId);
+        UUID callerId = UUID.fromString(jwt.getSubject());
+        boolean isAdmin = isAdmin(jwt);
+        PaymentResult result = paymentService.get(id, callerId, isAdmin);
         return ResponseEntity.ok(PaymentResponse.from(result));
     }
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:read')")
     @GetMapping
     public ResponseEntity<PaymentListResponse> listPayments(
             @RequestParam(required = false) String cursor,
@@ -73,23 +79,31 @@ public class PaymentController {
                     "pageSize must be between 1 and " + MAX_PAGE_SIZE + ", got: " + pageSize);
         }
 
-        UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentListResult result = paymentService.list(ownerId, cursor, pageSize);
+        UUID callerId = UUID.fromString(jwt.getSubject());
+        boolean isAdmin = isAdmin(jwt);
+        PaymentListResult result = paymentService.list(callerId, isAdmin, cursor, pageSize);
 
-        // Build self URL as an absolute path (no host), always including pageSize
         String selfUrl = "/v1/payments?pageSize=" + pageSize;
         if (cursor != null) selfUrl += "&cursor=" + cursor;
 
         return ResponseEntity.ok(PaymentListResponse.from(result, selfUrl));
     }
 
+    @PreAuthorize("hasAuthority('SCOPE_payments:write')")
     @PostMapping("/{id}/cancel")
     public ResponseEntity<PaymentResponse> cancelPayment(
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
 
-        UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentResult result = paymentService.cancel(id, ownerId);
+        UUID callerId = UUID.fromString(jwt.getSubject());
+        boolean isAdmin = isAdmin(jwt);
+        PaymentResult result = paymentService.cancel(id, callerId, isAdmin);
         return ResponseEntity.ok(PaymentResponse.from(result));
+    }
+
+    /** Reads the granted authorities, which Spring builds from the space-delimited {@code scope} claim. */
+    private static boolean isAdmin(Jwt jwt) {
+        return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> "SCOPE_payments:admin".equals(a.getAuthority()));
     }
 }

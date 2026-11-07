@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -51,8 +51,12 @@ class ReviewProbeTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper om;
 
+    /** Builder with both read and write scopes (probe tests all endpoint types). */
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder b, String sub) {
-        return b.with(jwt().jwt(j -> j.subject(sub)));
+        return b.with(jwt().jwt(j -> j.subject(sub))
+                .authorities(
+                        new SimpleGrantedAuthority("SCOPE_payments:read"),
+                        new SimpleGrantedAuthority("SCOPE_payments:write")));
     }
 
     private int create(String sub, String key, String body) throws Exception {
