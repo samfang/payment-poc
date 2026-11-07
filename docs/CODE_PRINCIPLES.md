@@ -102,6 +102,51 @@ Write the test first. All features begin with a failing test.
 - Use Spring Security's `@PreAuthorize` for scope-based access, e.g. `@PreAuthorize("hasAuthority('SCOPE_payments:write')")`.
 - Never pass raw user IDs from the request body — resolve them from the validated JWT principal.
 
+### Scope Design
+
+Scopes are independent — holding one does not imply another.
+
+| Scope              | Grants                                       |
+|--------------------|----------------------------------------------|
+| `payments:read`    | GET by ID, GET list (own payments only)      |
+| `payments:write`   | POST create, POST cancel (own payments only) |
+| `payments:admin`   | Bypasses ownership check on read and write operations; still requires the relevant read/write scope |
+
+### Ownership Enforcement
+
+Every authenticated request resolves the caller from the validated JWT subject (`jwt.getSubject()`). Raw user IDs from request bodies are never trusted for ownership.
+
+- **Non-admin callers**: service layer filters by `ownerId == callerId`. A payment belonging to another owner returns 404 (not 403) to avoid leaking existence.
+- **Admin callers**: ownership filter is skipped. `GET /v1/payments` returns all owners' payments unfiltered in the same cursor-paginated format. Cancel operates on any payment regardless of owner.
+
+### How the Controller Extracts Admin Status
+
+```java
+private static boolean isAdmin(Jwt jwt) {
+    return SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+            .anyMatch(a -> "SCOPE_payments:admin".equals(a.getAuthority()));
+}
+```
+
+**Do not** read from `jwt.getClaimAsStringList("scope")`. Real identity providers send `scope` as one space-separated string (e.g. `"payments:read payments:admin"`); `getClaimAsStringList` returns a single-element list in that case, so `.contains("payments:admin")` is always false. Reading from the granted authorities is correct because Spring Security already parses the claim into individual `SCOPE_*` authorities — the same set that `@PreAuthorize` checks.
+
+The `isAdmin` boolean is passed down to the service layer. The service never imports Spring Security types — the caller-resolution and admin-check logic lives in the controller, the ownership enforcement lives in the service.
+
+### AccessDeniedException must be handled explicitly
+
+`GlobalExceptionHandler` must declare an `@ExceptionHandler(AccessDeniedException.class)` that returns 403 **before** the generic `Exception` catch-all. If it is missing, every `@PreAuthorize` denial throws `AccessDeniedException` inside the controller, the generic handler catches it first, and the caller receives 500 instead of 403.
+
+### Error Responses from the Security Layer
+
+Spring Security authentication/authorization errors use the same shared error envelope as application errors:
+
+| Situation                        | Status | `error.code`      | Extra header                                   |
+|----------------------------------|--------|-------------------|------------------------------------------------|
+| No token / invalid token         | 401    | `UNAUTHENTICATED` | `WWW-Authenticate: Bearer realm="payment-service"` |
+| Valid token, insufficient scope  | 403    | `FORBIDDEN`       | —                                              |
+
+Both responses include an `error.debugId` for correlation.
+
 ---
 
 ## 6. Dependency Injection and Object Construction
