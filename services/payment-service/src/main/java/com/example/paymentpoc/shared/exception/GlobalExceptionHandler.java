@@ -5,14 +5,37 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(DomainException.class)
+    public ResponseEntity<ApiError> handleDomainException(DomainException ex) {
+        String debugId = newDebugId();
+        log.warn("Domain rule violation [debugId={}, code={}]: {}", debugId, ex.getErrorCode(), ex.getMessage());
+        return ResponseEntity
+                .status(ex.getHttpStatusCode())
+                .header("X-Error-Code", ex.getErrorCode())
+                .body(ApiError.of(ex.getErrorCode(), ex.getMessage(), debugId));
+    }
+
+    @ExceptionHandler(DuplicateIdempotencyKeyException.class)
+    public ResponseEntity<ApiError> handleDuplicateIdempotency(DuplicateIdempotencyKeyException ex) {
+        String debugId = newDebugId();
+        log.warn("Duplicate idempotency key [debugId={}] key={}", debugId, ex.getIdempotencyKey());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .header("X-Error-Code", "DUPLICATE_IDEMPOTENCY_KEY")
+                .body(ApiError.of("DUPLICATE_IDEMPOTENCY_KEY", ex.getMessage(), debugId));
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex) {
@@ -40,6 +63,54 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST)
                 .header("X-Error-Code", "VALIDATION_ERROR")
                 .body(body);
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiError> handleMissingHeader(MissingRequestHeaderException ex) {
+        String debugId = newDebugId();
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .header("X-Error-Code", "VALIDATION_ERROR")
+                .body(ApiError.of("VALIDATION_ERROR",
+                        "Required request header '" + ex.getHeaderName() + "' is missing.", debugId));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleBadBody(HttpMessageNotReadableException ex) {
+        String debugId = newDebugId();
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .header("X-Error-Code", "VALIDATION_ERROR")
+                .body(ApiError.of("VALIDATION_ERROR", "Request body is missing or malformed.", debugId));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String debugId = newDebugId();
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .header("X-Error-Code", "VALIDATION_ERROR")
+                .body(ApiError.of("VALIDATION_ERROR",
+                        "Invalid value '" + ex.getValue() + "' for parameter '" + ex.getName() + "'.",
+                        ex.getName(), debugId));
+    }
+
+    @ExceptionHandler(InvalidCursorException.class)
+    public ResponseEntity<ApiError> handleInvalidCursor(InvalidCursorException ex) {
+        String debugId = newDebugId();
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .header("X-Error-Code", "VALIDATION_ERROR")
+                .body(ApiError.of("VALIDATION_ERROR", ex.getMessage(), "cursor", debugId));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex) {
+        String debugId = newDebugId();
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .header("X-Error-Code", "VALIDATION_ERROR")
+                .body(ApiError.of("VALIDATION_ERROR", ex.getMessage(), debugId));
     }
 
     @ExceptionHandler(Exception.class)
