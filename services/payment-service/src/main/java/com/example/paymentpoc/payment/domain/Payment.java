@@ -1,6 +1,5 @@
 package com.example.paymentpoc.payment.domain;
 
-import com.example.paymentpoc.shared.exception.InvalidPaymentStateException;
 import java.time.Instant;
 import java.util.UUID;
 

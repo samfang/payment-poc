@@ -1,6 +1,5 @@
 package com.example.paymentpoc;
 
-import com.example.paymentpoc.payment.api.CreatePaymentRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +20,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import java.util.UUID;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -59,10 +59,10 @@ class PaymentIntegrationTest {
 
     private static final UUID OWNER_ID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
 
-    private Jwt jwt() {
+    private Jwt jwt(UUID sub) {
         return Jwt.withTokenValue("token")
                 .header("alg", "RS256")
-                .claim("sub", OWNER_ID.toString())
+                .claim("sub", sub.toString())
                 .build();
     }
 
@@ -70,7 +70,7 @@ class PaymentIntegrationTest {
     void createGetCancel_full_flow() throws Exception {
         // Create
         MvcResult createResult = mockMvc.perform(post("/v1/payments")
-                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt()))
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amount\":\"100.00\",\"currency\":\"USD\"}"))
@@ -83,33 +83,37 @@ class PaymentIntegrationTest {
         String responseBody = createResult.getResponse().getContentAsString();
         String paymentId = objectMapper.readTree(responseBody).get("id").asText();
 
-        // Get
-        mockMvc.perform(get("/v1/payments/{id}", paymentId)
-                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(paymentId))
-                .andExpect(jsonPath("$.status").value("CREATED"));
+        // Get — amount must match create (B9 regression)
+        String getAmount = objectMapper.readTree(
+                mockMvc.perform(get("/v1/payments/{id}", paymentId)
+                                .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID))))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.id").value(paymentId))
+                        .andExpect(jsonPath("$.status").value("CREATED"))
+                        .andReturn().getResponse().getContentAsString()
+        ).get("amount").asText();
+        assertThat(getAmount).isEqualTo("100.00");
 
         // Cancel
         mockMvc.perform(post("/v1/payments/{id}/cancel", paymentId)
-                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt())))
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
 
         // Cancel again should return 409
         mockMvc.perform(post("/v1/payments/{id}/cancel", paymentId)
-                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt())))
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("INVALID_PAYMENT_STATE"));
     }
 
     @Test
-    void create_then_replay_returns_201_without_duplicate() throws Exception {
+    void create_then_replay_returns_201_same_payment_id() throws Exception {
         String idempotencyKey = UUID.randomUUID().toString();
         String body = "{\"amount\":\"25.00\",\"currency\":\"EUR\"}";
 
         MvcResult first = mockMvc.perform(post("/v1/payments")
-                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt()))
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -119,7 +123,7 @@ class PaymentIntegrationTest {
         String firstId = objectMapper.readTree(first.getResponse().getContentAsString()).get("id").asText();
 
         MvcResult replay = mockMvc.perform(post("/v1/payments")
-                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt()))
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
@@ -127,16 +131,33 @@ class PaymentIntegrationTest {
                 .andReturn();
 
         String replayId = objectMapper.readTree(replay.getResponse().getContentAsString()).get("id").asText();
+        assertThat(replayId).isEqualTo(firstId);
+    }
 
-        // Both must return the same payment ID
-        assert firstId.equals(replayId) : "Idempotency replay returned different payment ID";
+    @Test
+    void same_key_different_body_returns_409() throws Exception {
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        mockMvc.perform(post("/v1/payments")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"10.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/v1/payments")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"999.00\",\"currency\":\"EUR\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("DUPLICATE_IDEMPOTENCY_KEY"));
     }
 
     @Test
     void get_other_owners_payment_returns_404() throws Exception {
-        // Create under OWNER_ID
         MvcResult createResult = mockMvc.perform(post("/v1/payments")
-                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt()))
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amount\":\"10.00\",\"currency\":\"GBP\"}"))
@@ -145,7 +166,6 @@ class PaymentIntegrationTest {
 
         String paymentId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
 
-        // Attempt to get as a different owner
         UUID otherId = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
         Jwt otherJwt = Jwt.withTokenValue("token2")
                 .header("alg", "RS256")
@@ -155,5 +175,87 @@ class PaymentIntegrationTest {
         mockMvc.perform(get("/v1/payments/{id}", paymentId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(otherJwt)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void same_key_different_owner_does_not_replay_cross_user() throws Exception {
+        String sharedKey = UUID.randomUUID().toString();
+        String body = "{\"amount\":\"1.00\",\"currency\":\"USD\"}";
+        UUID otherOwner = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+
+        MvcResult first = mockMvc.perform(post("/v1/payments")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
+                        .header("Idempotency-Key", sharedKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String firstId = objectMapper.readTree(first.getResponse().getContentAsString()).get("id").asText();
+        String firstOwnerId = objectMapper.readTree(first.getResponse().getContentAsString()).get("ownerId").asText();
+
+        // Other user using same idempotency key gets their own payment, not user A's
+        MvcResult second = mockMvc.perform(post("/v1/payments")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(otherOwner)))
+                        .header("Idempotency-Key", sharedKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String secondId = objectMapper.readTree(second.getResponse().getContentAsString()).get("id").asText();
+        String secondOwnerId = objectMapper.readTree(second.getResponse().getContentAsString()).get("ownerId").asText();
+
+        assertThat(secondId).isNotEqualTo(firstId);
+        assertThat(secondOwnerId).isEqualTo(otherOwner.toString());
+        assertThat(firstOwnerId).isEqualTo(OWNER_ID.toString());
+    }
+
+    @Test
+    void invalid_cursor_returns_400() throws Exception {
+        mockMvc.perform(get("/v1/payments?cursor=@@@")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void zero_amount_returns_400() throws Exception {
+        mockMvc.perform(post("/v1/payments")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"0\",\"currency\":\"USD\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void missing_idempotency_key_returns_400() throws Exception {
+        mockMvc.perform(post("/v1/payments")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"1.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void malformed_json_returns_400() throws Exception {
+        mockMvc.perform(post("/v1/payments")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID)))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{bad"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void non_uuid_path_returns_400() throws Exception {
+        mockMvc.perform(get("/v1/payments/not-a-uuid")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt(OWNER_ID))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
 }

@@ -1,7 +1,7 @@
 package com.example.paymentpoc.payment.application;
 
 import com.example.paymentpoc.payment.domain.Payment;
-import com.example.paymentpoc.payment.domain.PaymentStatus;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -11,7 +11,7 @@ public record PaymentResult(
         UUID ownerId,
         String amount,
         String currency,
-        PaymentStatus status,
+        String status,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -19,10 +19,18 @@ public record PaymentResult(
         return new PaymentResult(
                 payment.id(),
                 payment.ownerId(),
-                payment.money().amount().toPlainString(),
+                normalizeAmount(payment.money().amount()),
                 payment.money().currencyCode(),
-                payment.status(),
+                payment.status().name(),
                 payment.createdAt(),
                 payment.updatedAt());
+    }
+
+    private static String normalizeAmount(BigDecimal amount) {
+        BigDecimal stripped = amount.stripTrailingZeros();
+        // Keep at least 2 decimal places (e.g. "5" → "5.00", "5.5" → "5.50")
+        return stripped.scale() < 2
+                ? stripped.setScale(2).toPlainString()
+                : stripped.toPlainString();
     }
 }

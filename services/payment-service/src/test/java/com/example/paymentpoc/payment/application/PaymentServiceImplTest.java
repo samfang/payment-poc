@@ -1,7 +1,6 @@
 package com.example.paymentpoc.payment.application;
 
 import com.example.paymentpoc.payment.domain.*;
-import com.example.paymentpoc.shared.exception.InvalidPaymentStateException;
 import com.example.paymentpoc.shared.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +34,7 @@ class PaymentServiceImplTest {
 
         PaymentResult result = paymentService.create(new CreatePaymentCommand(OWNER_ID, "50.00", "USD"));
 
-        assertThat(result.status()).isEqualTo(PaymentStatus.CREATED);
+        assertThat(result.status()).isEqualTo("CREATED");
         assertThat(result.amount()).isEqualTo("50.00");
         assertThat(result.currency()).isEqualTo("USD");
         assertThat(result.ownerId()).isEqualTo(OWNER_ID);
@@ -84,7 +83,6 @@ class PaymentServiceImplTest {
 
     @Test
     void list_should_set_next_cursor_when_extra_row_exists() {
-        // Return pageSize+1 results to signal more data
         List<Payment> payments = List.of(
                 Payment.create(OWNER_ID, MONEY),
                 Payment.create(OWNER_ID, MONEY));
@@ -105,7 +103,7 @@ class PaymentServiceImplTest {
 
         PaymentResult result = paymentService.cancel(payment.id(), OWNER_ID);
 
-        assertThat(result.status()).isEqualTo(PaymentStatus.CANCELLED);
+        assertThat(result.status()).isEqualTo("CANCELLED");
         verify(paymentRepository).save(any(Payment.class));
     }
 

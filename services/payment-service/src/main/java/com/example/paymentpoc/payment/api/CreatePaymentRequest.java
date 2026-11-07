@@ -4,7 +4,9 @@ import jakarta.validation.constraints.*;
 
 public record CreatePaymentRequest(
         @NotBlank(message = "amount is required")
-        @Pattern(regexp = "^\\d+(\\.\\d{1,4})?$", message = "amount must be a positive decimal number")
+        // Rejects zero ("0", "0.0", "0.0000") via negative lookahead; allows "0.01", "1", "100.5000"
+        @Pattern(regexp = "^(?!0+(\\.0+)?$)\\d+(\\.\\d{1,4})?$",
+                message = "amount must be a positive decimal number with up to 4 decimal places")
         String amount,
 
         @NotBlank(message = "currency is required")

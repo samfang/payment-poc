@@ -1,8 +1,8 @@
 package com.example.paymentpoc.payment.api;
 
 import com.example.paymentpoc.payment.application.PaymentResult;
-import com.example.paymentpoc.payment.domain.PaymentStatus;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -11,7 +11,7 @@ public record PaymentResponse(
         UUID ownerId,
         String amount,
         String currency,
-        PaymentStatus status,
+        String status,
         Instant createdAt,
         Instant updatedAt,
         List<Link> links) {
@@ -20,9 +20,9 @@ public record PaymentResponse(
 
     public static PaymentResponse from(PaymentResult result) {
         String base = "/v1/payments/" + result.id();
-        List<Link> links = new java.util.ArrayList<>();
+        List<Link> links = new ArrayList<>();
         links.add(new Link("self", base, "GET"));
-        if (result.status() == PaymentStatus.CREATED) {
+        if ("CREATED".equals(result.status())) {
             links.add(new Link("cancel", base + "/cancel", "POST"));
         }
         return new PaymentResponse(

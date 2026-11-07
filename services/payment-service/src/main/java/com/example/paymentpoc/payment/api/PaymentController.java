@@ -1,7 +1,6 @@
 package com.example.paymentpoc.payment.api;
 
 import com.example.paymentpoc.payment.application.*;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,22 +27,29 @@ public class PaymentController {
             @Valid @RequestBody CreatePaymentRequest request,
             @AuthenticationPrincipal Jwt jwt) {
 
+        UUID ownerId = UUID.fromString(jwt.getSubject());
+        String bodyHash = request.amount() + "|" + request.currency();
+
         @SuppressWarnings("unchecked")
-        var cached = (java.util.Optional<ResponseEntity<?>>) (java.util.Optional<?>) idempotencyStore.getOrAcquire(idempotencyKey);
+        var cached = (java.util.Optional<ResponseEntity<PaymentResponse>>) (java.util.Optional<?>)
+                idempotencyStore.getOrAcquire(ownerId.toString(), idempotencyKey, bodyHash);
         if (cached.isPresent()) {
-            return (ResponseEntity<PaymentResponse>) cached.get();
+            return cached.get();
         }
 
-        UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentResult result = paymentService.create(new CreatePaymentCommand(ownerId, request.amount(), request.currency()));
-        PaymentResponse body = PaymentResponse.from(result);
-
-        ResponseEntity<PaymentResponse> response = ResponseEntity
-                .created(URI.create("/v1/payments/" + result.id()))
-                .body(body);
-
-        idempotencyStore.store(idempotencyKey, response);
-        return response;
+        try {
+            PaymentResult result = paymentService.create(
+                    new CreatePaymentCommand(ownerId, request.amount(), request.currency()));
+            PaymentResponse body = PaymentResponse.from(result);
+            ResponseEntity<PaymentResponse> response = ResponseEntity
+                    .created(URI.create("/v1/payments/" + result.id()))
+                    .body(body);
+            idempotencyStore.store(ownerId.toString(), idempotencyKey, bodyHash, response);
+            return response;
+        } catch (Exception e) {
+            idempotencyStore.release(ownerId.toString(), idempotencyKey);
+            throw e;
+        }
     }
 
     @GetMapping("/{id}")
@@ -60,14 +66,20 @@ public class PaymentController {
     public ResponseEntity<PaymentListResponse> listPayments(
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") int pageSize,
-            @AuthenticationPrincipal Jwt jwt,
-            HttpServletRequest httpRequest) {
+            @AuthenticationPrincipal Jwt jwt) {
 
-        int clampedSize = Math.min(Math.max(pageSize, 1), MAX_PAGE_SIZE);
+        if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException(
+                    "pageSize must be between 1 and " + MAX_PAGE_SIZE + ", got: " + pageSize);
+        }
+
         UUID ownerId = UUID.fromString(jwt.getSubject());
-        PaymentListResult result = paymentService.list(ownerId, cursor, clampedSize);
+        PaymentListResult result = paymentService.list(ownerId, cursor, pageSize);
 
-        String selfUrl = httpRequest.getRequestURL().toString();
+        // Build self URL as an absolute path (no host), always including pageSize
+        String selfUrl = "/v1/payments?pageSize=" + pageSize;
+        if (cursor != null) selfUrl += "&cursor=" + cursor;
+
         return ResponseEntity.ok(PaymentListResponse.from(result, selfUrl));
     }
 

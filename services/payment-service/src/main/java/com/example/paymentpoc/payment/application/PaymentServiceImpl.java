@@ -1,6 +1,7 @@
 package com.example.paymentpoc.payment.application;
 
 import com.example.paymentpoc.payment.domain.*;
+import com.example.paymentpoc.shared.exception.InvalidCursorException;
 import com.example.paymentpoc.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -73,13 +74,21 @@ public class PaymentServiceImpl implements PaymentService {
     record CursorPosition(Instant createdAt, UUID id) {
 
         static CursorPosition decode(String cursor) {
-            String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-            String[] parts = decoded.split(":", 2);
-            return new CursorPosition(Instant.ofEpochMilli(Long.parseLong(parts[0])), UUID.fromString(parts[1]));
+            try {
+                String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+                String[] parts = decoded.split(":", 2);
+                if (parts.length != 2) throw new IllegalArgumentException("wrong part count");
+                long micros = Long.parseLong(parts[0]);
+                Instant instant = Instant.ofEpochSecond(micros / 1_000_000L, (micros % 1_000_000L) * 1_000L);
+                return new CursorPosition(instant, UUID.fromString(parts[1]));
+            } catch (Exception e) {
+                throw new InvalidCursorException(cursor);
+            }
         }
 
         String encode() {
-            String raw = createdAt.toEpochMilli() + ":" + id;
+            long micros = createdAt.getEpochSecond() * 1_000_000L + createdAt.getNano() / 1_000L;
+            String raw = micros + ":" + id;
             return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
         }
     }
