@@ -6,7 +6,6 @@ import com.example.paymentpoc.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -22,7 +21,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentResult create(CreatePaymentCommand command) {
-        Money money = new Money(new BigDecimal(command.amount()), command.currency());
+        Money money = new Money(command.amount(), command.currency());
         Payment payment = Payment.create(command.ownerId(), money);
         return PaymentResult.from(paymentRepository.save(payment));
     }

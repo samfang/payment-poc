@@ -7,7 +7,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -26,16 +25,16 @@ class PaymentServiceImplTest {
     private PaymentServiceImpl paymentService;
 
     private static final UUID OWNER_ID = UUID.randomUUID();
-    private static final Money MONEY = new Money(new BigDecimal("50.00"), "USD");
+    private static final Money MONEY = new Money(5000L, "USD");
 
     @Test
     void create_should_persist_payment_with_CREATED_status() {
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentResult result = paymentService.create(new CreatePaymentCommand(OWNER_ID, "50.00", "USD"));
+        PaymentResult result = paymentService.create(new CreatePaymentCommand(OWNER_ID, 5000L, "USD"));
 
         assertThat(result.status()).isEqualTo("CREATED");
-        assertThat(result.amount()).isEqualTo("50.00");
+        assertThat(result.amount()).isEqualTo(5000L);
         assertThat(result.currency()).isEqualTo("USD");
         assertThat(result.ownerId()).isEqualTo(OWNER_ID);
         verify(paymentRepository).save(any(Payment.class));

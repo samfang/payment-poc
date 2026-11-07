@@ -71,12 +71,12 @@ class PaymentControllerTest {
     }
 
     private PaymentResult createdResult() {
-        return new PaymentResult(PAYMENT_ID, OWNER_ID, "50.00", "USD",
+        return new PaymentResult(PAYMENT_ID, OWNER_ID, 5000L, "USD",
                 "CREATED", Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"));
     }
 
     private PaymentResult cancelledResult() {
-        return new PaymentResult(PAYMENT_ID, OWNER_ID, "50.00", "USD",
+        return new PaymentResult(PAYMENT_ID, OWNER_ID, 5000L, "USD",
                 "CANCELLED", Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:01Z"));
     }
 
@@ -90,10 +90,11 @@ class PaymentControllerTest {
                         .with(writeJwt(OWNER_ID))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"50.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":5000,\"currency\":\"USD\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/v1/payments/" + PAYMENT_ID))
                 .andExpect(jsonPath("$.id").value(PAYMENT_ID.toString()))
+                .andExpect(jsonPath("$.amount").value(5000))
                 .andExpect(jsonPath("$.status").value("CREATED"))
                 .andExpect(jsonPath("$.links[?(@.rel=='self')]").exists())
                 .andExpect(jsonPath("$.links[?(@.rel=='cancel')]").exists());
@@ -103,7 +104,7 @@ class PaymentControllerTest {
     void createPayment_replay_returns_original_201_without_calling_service_again() throws Exception {
         when(paymentService.create(any())).thenReturn(createdResult());
         String key = UUID.randomUUID().toString();
-        String body = "{\"amount\":\"50.00\",\"currency\":\"USD\"}";
+        String body = "{\"amount\":5000,\"currency\":\"USD\"}";
 
         mockMvc.perform(post("/v1/payments")
                         .with(writeJwt(OWNER_ID))
@@ -131,14 +132,14 @@ class PaymentControllerTest {
                         .with(writeJwt(OWNER_ID))
                         .header("Idempotency-Key", key)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"50.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":5000,\"currency\":\"USD\"}"))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/v1/payments")
                         .with(writeJwt(OWNER_ID))
                         .header("Idempotency-Key", key)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"999.00\",\"currency\":\"EUR\"}"))
+                        .content("{\"amount\":99900,\"currency\":\"EUR\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("DUPLICATE_IDEMPOTENCY_KEY"));
     }
@@ -147,7 +148,7 @@ class PaymentControllerTest {
     void createPayment_same_key_different_owner_does_not_replay() throws Exception {
         when(paymentService.create(any())).thenReturn(createdResult());
         String key = UUID.randomUUID().toString();
-        String body = "{\"amount\":\"50.00\",\"currency\":\"USD\"}";
+        String body = "{\"amount\":5000,\"currency\":\"USD\"}";
         UUID otherOwner = UUID.randomUUID();
 
         mockMvc.perform(post("/v1/payments")
@@ -173,7 +174,7 @@ class PaymentControllerTest {
                         .with(writeJwt(OWNER_ID))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"0\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":0,\"currency\":\"USD\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
@@ -184,7 +185,40 @@ class PaymentControllerTest {
                         .with(writeJwt(OWNER_ID))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"-10.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":-1,\"currency\":\"USD\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void createPayment_float_amount_returns_400() throws Exception {
+        mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":500.0,\"currency\":\"USD\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void createPayment_string_amount_returns_400() throws Exception {
+        mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"500\",\"currency\":\"USD\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void createPayment_amount_too_large_returns_400() throws Exception {
+        mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":100000000,\"currency\":\"USD\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
@@ -194,7 +228,7 @@ class PaymentControllerTest {
         mockMvc.perform(post("/v1/payments")
                         .with(writeJwt(OWNER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"50.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":5000,\"currency\":\"USD\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
@@ -205,7 +239,7 @@ class PaymentControllerTest {
                         .with(writeJwt(OWNER_ID))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"50.00\"}"))
+                        .content("{\"amount\":5000}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
@@ -226,7 +260,7 @@ class PaymentControllerTest {
         mockMvc.perform(post("/v1/payments")
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"50.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":5000,\"currency\":\"USD\"}"))
                 .andExpect(status().isUnauthorized());
     }
 

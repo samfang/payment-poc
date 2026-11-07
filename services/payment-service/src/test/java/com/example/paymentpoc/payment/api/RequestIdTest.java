@@ -48,7 +48,7 @@ class RequestIdTest {
     private static final UUID PAYMENT_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
     private PaymentResult sampleResult() {
-        return new PaymentResult(PAYMENT_ID, OWNER_ID, "10.00", "USD", "CREATED",
+        return new PaymentResult(PAYMENT_ID, OWNER_ID, 1000L, "USD", "CREATED",
                 Instant.now(), Instant.now());
     }
 
@@ -61,7 +61,7 @@ class RequestIdTest {
                                 .authorities(new SimpleGrantedAuthority("SCOPE_payments:write")))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"10.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":1000,\"currency\":\"USD\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Request-Id"));
     }

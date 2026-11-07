@@ -7,7 +7,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -31,7 +30,7 @@ class PaymentServiceAdminTest {
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
     private static final UUID OWNER_ID = UUID.randomUUID();
-    private static final Money MONEY = new Money(new BigDecimal("10.00"), "USD");
+    private static final Money MONEY = new Money(1000L, "USD");
 
     @Test
     void get_as_admin_returns_payment_regardless_of_owner() {
