@@ -1,5 +1,7 @@
 package com.example.paymentpoc.payment.api;
 
+import com.example.paymentpoc.shared.config.SecurityConfig;
+
 import com.example.paymentpoc.payment.application.*;
 import com.example.paymentpoc.payment.domain.InvalidPaymentStateException;
 import com.example.paymentpoc.payment.domain.PaymentStatus;
@@ -24,7 +26,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PaymentController.class)
-@Import(IdempotencyStore.class)
+@Import({IdempotencyStore.class, SecurityConfig.class})
 class PaymentControllerTest {
 
     @Autowired
@@ -257,7 +259,7 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.items[0].id").value(PAYMENT_ID.toString()))
                 .andExpect(jsonPath("$.links[?(@.rel=='self')]").exists())
-                .andExpect(jsonPath("$.links[?(@.rel=='self')][0].href").value("/v1/payments?pageSize=20"));
+                .andExpect(jsonPath("$.links[?(@.rel=='self')].href").value(org.hamcrest.Matchers.contains("/v1/payments?pageSize=20")));
     }
 
     @Test
