@@ -126,7 +126,7 @@ class RequestIdTest {
         assertRequestIdMatchesDebugId(result);
     }
 
-    private static void assertRequestIdMatchesDebugId(MvcResult result) {
+    private static void assertRequestIdMatchesDebugId(MvcResult result) throws Exception {
         String requestId = result.getResponse().getHeader("Request-Id");
         String debugId = JsonPath.read(result.getResponse().getContentAsString(), "$.error.debugId");
         assertThat(requestId).isNotBlank();
