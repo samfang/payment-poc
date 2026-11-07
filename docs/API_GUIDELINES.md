@@ -2,34 +2,51 @@
 
 This document defines the REST API design standards for all services in the `payment-poc` monorepo. These guidelines are derived from and aligned with two industry-published standards:
 
-- **Microsoft Azure REST API Guidelines** — https://github.com/microsoft/api-guidelines/blob/vNext/azure/Guidelines.md
-- **PayPal REST API Style Guide** — https://github.com/paypal/api-standards/blob/master/api-style-guide.md
+- **Microsoft Azure REST API Guidelines** — https://github.com/microsoft/api-guidelines/blob/vNext/azure/Guidelines.md  
+  (also: [Graph guidelines](https://github.com/microsoft/api-guidelines/blob/vNext/graph/GuidelinesGraph.md), [repo root](https://github.com/microsoft/api-guidelines))
+- **PayPal REST API Style Guide** — [archived](https://web.archive.org/web/20220114091735/https://github.com/paypal/api-standards/blob/master/api-style-guide.md) · [PayPal Tech blog](https://medium.com/paypal-tech/api-style-guide-and-patterns-the-evolutionary-journey-continues-bb2bad7a87ee)
 
-Where the two standards differ, the more explicit rule is preferred. Payment-specific extensions are noted.
+---
+
+## Standards Comparison: Where Microsoft and PayPal Differ
+
+Where the two standards conflict, the choice made for this project is shown in the **We use** column with the rationale.
+
+| Topic | Microsoft (Azure) | PayPal | We use | Rationale |
+|---|---|---|---|---|
+| **Versioning** | Query param `?api-version=2024-01-01` (date-based) | Path segment `/v1/`, `/v2/` (integer) | Path segment `/v1/` | Path versioning is explicit in URLs, easier to route at the gateway, and aligns with the existing PayPal payment-service convention. |
+| **JSON field casing** | `camelCase` | `snake_case` | `camelCase` | Spring Boot / Jackson defaults to camelCase; less friction with the Java codebase. |
+| **Error body** | `{"error": {"code", "message", "target", "details", "innererror"}}` | `{"name", "message", "details", "debug_id", "links"}` | Microsoft envelope with `debugId` | The Microsoft shape nests cleanly and is better for tooling; `debugId` is kept from PayPal for support traceability. |
+| **Pagination** | `{"value": [...], "nextLink": "..."}` | `{"items": [...], "links": [...]}` | Cursor-based with `items` + `nextCursor` + `links` | Cursor pagination is adopted from both; response field names follow PayPal convention (`items`) since `value` is ambiguous. |
+| **Idempotency header** | `Repeatability-Request-ID` + `Repeatability-First-Sent` | `PayPal-Request-Id` | `Idempotency-Key` | A single UUID header is simpler for clients. `Idempotency-Key` is widely understood (also used by Stripe) and avoids a PayPal-branded name in a generic service. |
+| **Money format** | No specific guidance | String with separate `currency_code` | String `amount` + `currency` (ISO 4217) | Avoids floating-point precision loss; follows PayPal's payment API convention. |
+| **HATEOAS** | Not required | Required `links` array on every resource | Required | HATEOAS improves discoverability. Links help clients navigate next states without constructing URLs. |
 
 ---
 
 ## 1. URL Structure
 
 ```
-https://<host>/<service-root>/v{N}/<resource-collection>[/<resource-id>][/<sub-collection>]
+https://<host>/v{N}/<resource-collection>[/<resource-id>][/<sub-resource>]
 ```
 
 Examples:
 
 ```
-GET  /payments/v1/payments
-GET  /payments/v1/payments/{paymentId}
-POST /payments/v1/payments/{paymentId}/captures
+GET  /v1/payments
+GET  /v1/payments/{paymentId}
+POST /v1/payments/{paymentId}/captures
 ```
+
+The service root (e.g. `/payments`) is a gateway concern — services bind at `/` and expose `/v1/...` directly. Do not embed a service-name prefix in the application's path.
 
 ### Rules
 
 - Path segments use **lowercase kebab-case**: `/payment-methods`, not `/paymentMethods`.
 - Collection names are **plural nouns**: `/payments`, not `/payment`.
-- Do not use verbs in URLs for CRUD operations. Use HTTP method semantics.
-- Action endpoints that cannot be expressed as a resource may use a verb sub-resource: `/payments/{id}/cancel`.
-- Do not expose internal identifiers (auto-increment IDs) — use UUIDs.
+- Do not use verbs in URLs for CRUD operations. Use HTTP method semantics instead.
+- Action endpoints that cannot be expressed as a resource noun may use a verb sub-resource: `POST /v1/payments/{id}/cancel`.
+- Do not expose internal identifiers (auto-increment IDs). Use UUIDs.
 
 ---
 
@@ -38,8 +55,8 @@ POST /payments/v1/payments/{paymentId}/captures
 - API versions appear **in the URL path**: `/v1/payments`, `/v2/payments`.
 - The version segment is a single integer (`v1`, `v2`). No minor versions in the path.
 - Breaking changes require a new major version. The old version is supported for a minimum deprecation period of 12 months.
-- A breaking change is any of: removing a field, changing a field type, changing HTTP method/status semantics, removing an endpoint.
-- Adding optional fields or new endpoints is **non-breaking**.
+- **Breaking change** = removing a field, changing a field type, changing HTTP method/status semantics, removing an endpoint.
+- **Non-breaking** = adding optional fields, adding new endpoints.
 
 ---
 
@@ -70,7 +87,7 @@ POST /payments/v1/payments/{paymentId}/captures
 | `401 Unauthorized` | Missing or invalid authentication token |
 | `403 Forbidden` | Authenticated but not authorised for this resource |
 | `404 Not Found` | Resource does not exist (or existence is hidden by access policy) |
-| `409 Conflict` | Duplicate request (use with idempotency key collision), state conflict |
+| `409 Conflict` | Duplicate idempotency key with a different request body; state conflict |
 | `422 Unprocessable Entity` | Syntactically valid but semantically invalid (e.g. insufficient funds) |
 | `429 Too Many Requests` | Rate limit exceeded; include `Retry-After` header |
 | `500 Internal Server Error` | Unexpected server fault |
@@ -99,8 +116,8 @@ POST /payments/v1/payments/{paymentId}/captures
   "amount": "49.99",
   "currency": "USD",
   "links": [
-    { "rel": "self",    "href": "/payments/v1/payments/pay_8f3a2b1c", "method": "GET" },
-    { "rel": "refund",  "href": "/payments/v1/payments/pay_8f3a2b1c/refunds", "method": "POST" }
+    { "rel": "self",    "href": "/v1/payments/pay_8f3a2b1c", "method": "GET" },
+    { "rel": "refund",  "href": "/v1/payments/pay_8f3a2b1c/refunds", "method": "POST" }
   ]
 }
 ```
@@ -109,13 +126,13 @@ POST /payments/v1/payments/{paymentId}/captures
 
 ## 6. HATEOAS Links
 
-Every resource response **should** include a `links` array for discoverability (following PayPal's convention):
+Every resource response **must** include a `links` array for discoverability:
 
 ```json
 "links": [
-  { "rel": "self",   "href": "/payments/v1/payments/{id}", "method": "GET" },
-  { "rel": "update", "href": "/payments/v1/payments/{id}", "method": "PATCH" },
-  { "rel": "cancel", "href": "/payments/v1/payments/{id}/cancel", "method": "POST" }
+  { "rel": "self",   "href": "/v1/payments/{id}", "method": "GET" },
+  { "rel": "update", "href": "/v1/payments/{id}", "method": "PATCH" },
+  { "rel": "cancel", "href": "/v1/payments/{id}/cancel", "method": "POST" }
 ]
 ```
 
@@ -126,7 +143,7 @@ Every resource response **should** include a `links` array for discoverability (
 
 ## 7. Error Response Format
 
-All error responses use a consistent envelope:
+All error responses use a consistent envelope (Microsoft structure with PayPal's `debugId`):
 
 ```json
 {
@@ -154,7 +171,7 @@ All error responses use a consistent envelope:
 | `error.details` | No | Array of sub-errors for multi-field validation failures. |
 | `error.debugId` | Yes | Opaque ID for support tracing. Correlates to server logs. |
 
-- Include `X-Error-Code: INSUFFICIENT_FUNDS` as a response header matching `error.code` (Microsoft convention).
+- Include `X-Error-Code: INSUFFICIENT_FUNDS` as a response header matching `error.code`.
 - Validation errors that affect multiple fields return a single `400` with all failing fields in `error.details`.
 
 ---
@@ -166,12 +183,10 @@ All collection endpoints **must** support pagination. Never return an unbounded 
 ```json
 {
   "items": [ ... ],
-  "totalCount": 142,
-  "pageSize": 20,
   "nextCursor": "eyJpZCI6InBheV8xMjMifQ==",
   "links": [
-    { "rel": "self", "href": "/payments/v1/payments?cursor=...&pageSize=20", "method": "GET" },
-    { "rel": "next", "href": "/payments/v1/payments?cursor=eyJpZCI6InBheV8xMjMifQ==&pageSize=20", "method": "GET" }
+    { "rel": "self", "href": "/v1/payments?cursor=...&pageSize=20", "method": "GET" },
+    { "rel": "next", "href": "/v1/payments?cursor=eyJpZCI6InBheV8xMjMifQ==&pageSize=20", "method": "GET" }
   ]
 }
 ```
@@ -179,23 +194,24 @@ All collection endpoints **must** support pagination. Never return an unbounded 
 - Use **cursor-based pagination** (not offset). Cursor is an opaque, base64-encoded string.
 - Default page size: `20`. Maximum: `100`.
 - When there is no next page, omit `nextCursor` and the `next` link.
+- `totalCount` is **optional**. Omit it by default — computing an accurate count on large tables is expensive. Include it only when the client explicitly requests it (e.g. `?includeTotalCount=true`).
 - Query parameters: `pageSize` (integer), `cursor` (string).
 
 ---
 
 ## 9. Idempotency
 
-**All state-mutating operations must be idempotent** (Microsoft requirement). This is especially critical for payments.
+**All state-mutating operations must be idempotent** (critical for payments).
 
-- Clients **must** include a `PayPal-Request-Id` (or `Idempotency-Key`) header on all `POST`, `PUT`, and `PATCH` requests.
+- Clients **must** include an `Idempotency-Key` header on all `POST`, `PUT`, and `PATCH` requests.
 - The header value is a client-generated UUID (v4).
 - The server caches the response for the same key for a minimum of 24 hours.
-- A duplicate request with the same key returns the **original cached response** (`200 OK`), not `409`.
+- A duplicate request with the same key returns the **original cached response with its original status code** — `201 Created` for a successful creation, not `200 OK`.
 - If the same key is used with a different request body, return `409 Conflict`.
 
 ```
-POST /payments/v1/payments
-PayPal-Request-Id: 7f9d2b1a-3c4e-4f5a-b6d7-8e9f0a1b2c3d
+POST /v1/payments
+Idempotency-Key: 7f9d2b1a-3c4e-4f5a-b6d7-8e9f0a1b2c3d
 ```
 
 ---
@@ -203,9 +219,9 @@ PayPal-Request-Id: 7f9d2b1a-3c4e-4f5a-b6d7-8e9f0a1b2c3d
 ## 10. Filtering, Sorting, and Searching
 
 ```
-GET /payments/v1/payments?status=CAPTURED&currency=USD
-GET /payments/v1/payments?sort=createdAt:desc,amount:asc
-GET /payments/v1/payments?q=john
+GET /v1/payments?status=CAPTURED&currency=USD
+GET /v1/payments?sort=createdAt:desc,amount:asc
+GET /v1/payments?q=john
 ```
 
 - Filter parameters match resource field names in `camelCase`.
