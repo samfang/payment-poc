@@ -1,5 +1,6 @@
 package com.example.paymentpoc.shared.exception;
 
+import com.example.paymentpoc.payment.domain.PaymentStatus;
 import java.util.List;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,33 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(InvalidPaymentStateException.class)
+    public ResponseEntity<ApiError> handleInvalidState(InvalidPaymentStateException ex) {
+        String debugId = newDebugId();
+        PaymentStatus current = ex.getCurrentStatus();
+        log.warn("Invalid payment state transition [debugId={}] currentStatus={}", debugId, current);
+        ApiError body = new ApiError(new ApiError.ErrorBody(
+                "INVALID_PAYMENT_STATE",
+                ex.getMessage(),
+                null,
+                List.of(new ApiError.ErrorDetail("INVALID_STATE", ex.getMessage(), "status")),
+                debugId));
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .header("X-Error-Code", "INVALID_PAYMENT_STATE")
+                .body(body);
+    }
+
+    @ExceptionHandler(DuplicateIdempotencyKeyException.class)
+    public ResponseEntity<ApiError> handleDuplicateIdempotency(DuplicateIdempotencyKeyException ex) {
+        String debugId = newDebugId();
+        log.warn("Duplicate idempotency key [debugId={}] key={}", debugId, ex.getIdempotencyKey());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .header("X-Error-Code", "DUPLICATE_IDEMPOTENCY_KEY")
+                .body(ApiError.of("DUPLICATE_IDEMPOTENCY_KEY", ex.getMessage(), debugId));
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex) {
