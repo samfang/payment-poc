@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+  <!-- JSON appender for deployed environments (stdout) -->
+  <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+      <includeCallerData>false</includeCallerData>
+      <fieldNames>
+        <timestamp>time</timestamp>
+        <message>msg</message>
+        <logger>logger</logger>
+        <thread>thread</thread>
+        <level>level</level>
+      </fieldNames>
+    </encoder>
+  </appender>
+
+  <!-- Plain-text appender for local development -->
+  <appender name="PLAIN_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-}] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Use plain text for the 'local' profile only -->
+  <springProfile name="local">
+    <root level="INFO">
+      <appender-ref ref="PLAIN_STDOUT"/>
+    </root>
+    <logger name="com.example.paymentpoc" level="DEBUG"/>
+    <logger name="org.springframework.security" level="DEBUG"/>
+  </springProfile>
+
+  <!-- JSON for all other profiles -->
+  <springProfile name="!local">
+    <root level="INFO">
+      <appender-ref ref="JSON_STDOUT"/>
+    </root>
+  </springProfile>
+
+</configuration>
