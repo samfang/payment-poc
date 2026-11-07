@@ -100,6 +100,13 @@ class PaymentIntegrationTest {
                         new SimpleGrantedAuthority("SCOPE_payments:admin"));
     }
 
+    private static RequestPostProcessor adminOnlyJwt(UUID sub) {
+        return SecurityMockMvcRequestPostProcessors.jwt()
+                .jwt(j -> j.subject(sub.toString())
+                        .claim("scope", List.of("payments:admin")))
+                .authorities(new SimpleGrantedAuthority("SCOPE_payments:admin"));
+    }
+
     @Test
     void createGetCancel_full_flow() throws Exception {
         // Create (requires write)
@@ -356,9 +363,7 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    void admin_read_scope_cannot_get_without_read_scope() throws Exception {
-        // payments:admin alone does not grant read — still needs SCOPE_payments:read or :admin
-        // Here we verify: admin+read can GET; non-admin non-read cannot
+    void write_only_scope_cannot_get() throws Exception {
         MvcResult createResult = mockMvc.perform(post("/v1/payments")
                         .with(writeJwt(OWNER_ID))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -369,9 +374,35 @@ class PaymentIntegrationTest {
 
         String paymentId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
 
-        // Write-only scope (no read, no admin) → 403
+        // Write-only (no read, no admin) → 403
         mockMvc.perform(get("/v1/payments/{id}", paymentId)
                         .with(writeJwt(OWNER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void admin_only_scope_without_read_cannot_get_or_list() throws Exception {
+        MvcResult createResult = mockMvc.perform(post("/v1/payments")
+                        .with(writeJwt(OWNER_ID))
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":\"3.00\",\"currency\":\"USD\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String paymentId = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+        UUID adminId = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaad");
+
+        // admin scope alone (no payments:read) → 403 on GET by id
+        mockMvc.perform(get("/v1/payments/{id}", paymentId)
+                        .with(adminOnlyJwt(adminId)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
+
+        // admin scope alone (no payments:read) → 403 on list
+        mockMvc.perform(get("/v1/payments")
+                        .with(adminOnlyJwt(adminId)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error.code").value("FORBIDDEN"));
     }

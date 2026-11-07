@@ -79,12 +79,28 @@ class PaymentControllerScopeTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void getPayment_admin_scope_only_returns_403() throws Exception {
+        mockMvc.perform(get("/v1/payments/{id}", PAYMENT_ID)
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_payments:admin"))))
+                .andExpect(status().isForbidden());
+    }
+
     // ── GET /v1/payments — requires payments:read ──────────────────────────────
 
     @Test
     void listPayments_no_scope_returns_403() throws Exception {
         mockMvc.perform(get("/v1/payments")
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void listPayments_admin_scope_only_returns_403() throws Exception {
+        mockMvc.perform(get("/v1/payments")
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))
+                                .authorities(new SimpleGrantedAuthority("SCOPE_payments:admin"))))
                 .andExpect(status().isForbidden());
     }
 

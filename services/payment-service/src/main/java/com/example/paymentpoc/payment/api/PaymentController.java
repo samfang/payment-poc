@@ -54,7 +54,7 @@ public class PaymentController {
         }
     }
 
-    @PreAuthorize("hasAuthority('SCOPE_payments:read') or hasAuthority('SCOPE_payments:admin')")
+    @PreAuthorize("hasAuthority('SCOPE_payments:read')")
     @GetMapping("/{id}")
     public ResponseEntity<PaymentResponse> getPayment(
             @PathVariable UUID id,
@@ -66,7 +66,7 @@ public class PaymentController {
         return ResponseEntity.ok(PaymentResponse.from(result));
     }
 
-    @PreAuthorize("hasAuthority('SCOPE_payments:read') or hasAuthority('SCOPE_payments:admin')")
+    @PreAuthorize("hasAuthority('SCOPE_payments:read')")
     @GetMapping
     public ResponseEntity<PaymentListResponse> listPayments(
             @RequestParam(required = false) String cursor,
