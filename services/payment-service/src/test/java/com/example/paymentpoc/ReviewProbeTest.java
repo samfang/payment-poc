@@ -78,24 +78,24 @@ class ReviewProbeTest {
 
         // B1: zero amount → 400
         assertThat(create(userA, UUID.randomUUID().toString(),
-                "{\"amount\":\"0\",\"currency\":\"USD\"}")).isEqualTo(400);
+                "{\"amount\":0,\"currency\":\"USD\"}")).isEqualTo(400);
 
         // B2: missing Idempotency-Key → 400
-        assertThat(create(userA, null, "{\"amount\":\"1.00\",\"currency\":\"USD\"}")).isEqualTo(400);
+        assertThat(create(userA, null, "{\"amount\":100,\"currency\":\"USD\"}")).isEqualTo(400);
 
         // B3: malformed JSON → 400
         assertThat(create(userA, UUID.randomUUID().toString(), "{bad")).isEqualTo(400);
 
         // B6: same key, different body → 409
         String key = UUID.randomUUID().toString();
-        assertThat(create(userA, key, "{\"amount\":\"5.00\",\"currency\":\"USD\"}")).isEqualTo(201);
-        assertThat(create(userA, key, "{\"amount\":\"999.00\",\"currency\":\"EUR\"}")).isEqualTo(409);
+        assertThat(create(userA, key, "{\"amount\":500,\"currency\":\"USD\"}")).isEqualTo(201);
+        assertThat(create(userA, key, "{\"amount\":99900,\"currency\":\"EUR\"}")).isEqualTo(409);
 
         // B7: same key, other user does NOT get user A's payment
         String firstBody = createAndGetBody(userA, key + "-scope",
-                "{\"amount\":\"5.00\",\"currency\":\"USD\"}");
+                "{\"amount\":500,\"currency\":\"USD\"}");
         String otherBody = createAndGetBody(userB, key + "-scope",
-                "{\"amount\":\"1.00\",\"currency\":\"USD\"}");
+                "{\"amount\":100,\"currency\":\"USD\"}");
         String firstId = om.readTree(firstBody).get("id").asText();
         String otherOwnerId = om.readTree(otherBody).get("ownerId").asText();
         assertThat(om.readTree(otherBody).get("id").asText()).isNotEqualTo(firstId);
@@ -103,12 +103,12 @@ class ReviewProbeTest {
 
         // B9: amount representation consistent between create and get
         String createBody = createAndGetBody(userA, UUID.randomUUID().toString(),
-                "{\"amount\":\"5.00\",\"currency\":\"USD\"}");
+                "{\"amount\":500,\"currency\":\"USD\"}");
         String paymentId = om.readTree(createBody).get("id").asText();
-        String amountOnCreate = om.readTree(createBody).get("amount").asText();
+        long amountOnCreate = om.readTree(createBody).get("amount").asLong();
         String getBody = mvc.perform(as(get("/v1/payments/{id}", paymentId), userA))
                 .andReturn().getResponse().getContentAsString();
-        String amountOnGet = om.readTree(getBody).get("amount").asText();
+        long amountOnGet = om.readTree(getBody).get("amount").asLong();
         assertThat(amountOnGet).isEqualTo(amountOnCreate);
 
         // B4: invalid path UUID → 400
@@ -122,7 +122,7 @@ class ReviewProbeTest {
         // B8: pagination no duplicates across pages (30 payments, pageSize=7)
         String userC = UUID.randomUUID().toString();
         for (int i = 0; i < 30; i++) {
-            create(userC, UUID.randomUUID().toString(), "{\"amount\":\"1.00\",\"currency\":\"USD\"}");
+            create(userC, UUID.randomUUID().toString(), "{\"amount\":100,\"currency\":\"USD\"}");
         }
         List<String> seen = new ArrayList<>();
         String cursor = null;

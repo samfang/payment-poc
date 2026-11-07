@@ -11,7 +11,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
@@ -36,7 +35,7 @@ class PaymentRepositoryImplTest {
     private PaymentRepositoryImpl repository;
 
     private static final UUID OWNER = UUID.randomUUID();
-    private static final Money MONEY = new Money(new BigDecimal("25.00"), "EUR");
+    private static final Money MONEY = new Money(2500L, "EUR");
 
     @Test
     void should_persist_and_retrieve_all_fields() {
@@ -45,7 +44,7 @@ class PaymentRepositoryImplTest {
         Payment found = repository.findById(saved.id()).orElseThrow();
         assertThat(found.id()).isEqualTo(saved.id());
         assertThat(found.ownerId()).isEqualTo(OWNER);
-        assertThat(found.money().amount()).isEqualByComparingTo("25.00");
+        assertThat(found.money().minorUnits()).isEqualTo(2500L);
         assertThat(found.money().currencyCode()).isEqualTo("EUR");
         assertThat(found.status()).isEqualTo(PaymentStatus.CREATED);
         assertThat(found.createdAt()).isNotNull();
