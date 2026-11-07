@@ -4,7 +4,6 @@ import com.example.paymentpoc.payment.domain.Money;
 import com.example.paymentpoc.payment.domain.Payment;
 import com.example.paymentpoc.payment.domain.PaymentStatus;
 import jakarta.persistence.*;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -19,8 +18,8 @@ class PaymentEntity {
     @Column(name = "owner_id", nullable = false)
     private UUID ownerId;
 
-    @Column(name = "amount", nullable = false, precision = 19, scale = 4)
-    private BigDecimal amount;
+    @Column(name = "amount", nullable = false)
+    private long amount;
 
     @Column(name = "currency_code", nullable = false, length = 3)
     private String currencyCode;
@@ -41,7 +40,7 @@ class PaymentEntity {
         PaymentEntity entity = new PaymentEntity();
         entity.id = domain.id();
         entity.ownerId = domain.ownerId();
-        entity.amount = domain.money().amount();
+        entity.amount = domain.money().minorUnits();
         entity.currencyCode = domain.money().currencyCode();
         entity.status = domain.status();
         entity.createdAt = domain.createdAt();

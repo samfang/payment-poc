@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(ex.getHttpStatusCode())
                 .header("X-Error-Code", ex.getErrorCode())
-                .body(ApiError.of(ex.getErrorCode(), ex.getMessage(), debugId));
+                .body(ApiError.of(ex.getErrorCode(), ex.getMessage(), ex.getTarget(), debugId));
     }
 
     @ExceptionHandler(DuplicateIdempotencyKeyException.class)

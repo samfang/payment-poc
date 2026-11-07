@@ -8,11 +8,17 @@ public abstract class DomainException extends RuntimeException {
 
     private final String errorCode;
     private final int httpStatusCode;
+    private final String target;
 
     protected DomainException(String errorCode, int httpStatusCode, String message) {
+        this(errorCode, httpStatusCode, message, null);
+    }
+
+    protected DomainException(String errorCode, int httpStatusCode, String message, String target) {
         super(message);
         this.errorCode = errorCode;
         this.httpStatusCode = httpStatusCode;
+        this.target = target;
     }
 
     public String getErrorCode() {
@@ -21,5 +27,9 @@ public abstract class DomainException extends RuntimeException {
 
     public int getHttpStatusCode() {
         return httpStatusCode;
+    }
+
+    public String getTarget() {
+        return target;
     }
 }

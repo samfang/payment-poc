@@ -47,7 +47,7 @@ class PaymentControllerScopeTest {
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"1.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":100,\"currency\":\"USD\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -58,7 +58,7 @@ class PaymentControllerScopeTest {
                                 .authorities(new SimpleGrantedAuthority("SCOPE_payments:read")))
                         .header("Idempotency-Key", UUID.randomUUID().toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":\"1.00\",\"currency\":\"USD\"}"))
+                        .content("{\"amount\":100,\"currency\":\"USD\"}"))
                 .andExpect(status().isForbidden());
     }
 

@@ -43,7 +43,7 @@ class RealTokenScopeTest {
     @Test void scopes_and_admin_work_with_space_delimited_scope_claim() throws Exception {
         var r = mvc.perform(post("/v1/payments").header("Authorization", auth(A, "payments:read payments:write"))
             .header("Idempotency-Key", UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"amount\":\"7.00\",\"currency\":\"USD\"}")).andReturn().getResponse();
+            .content("{\"amount\":700,\"currency\":\"USD\"}")).andReturn().getResponse();
         assertThat(r.getStatus()).isEqualTo(201);
         String id = r.getContentAsString().replaceAll(".*\"id\":\"([^\"]+)\".*", "$1");
         assertThat(mvc.perform(get("/v1/payments/" + id)).andReturn().getResponse().getStatus()).as("no token GET").isEqualTo(401);
