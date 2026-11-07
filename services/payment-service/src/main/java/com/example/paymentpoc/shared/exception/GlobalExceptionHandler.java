@@ -1,8 +1,10 @@
 package com.example.paymentpoc.shared.exception;
 
+import com.example.paymentpoc.shared.config.RequestIdFilter;
 import java.util.List;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -142,6 +144,7 @@ public class GlobalExceptionHandler {
     }
 
     private String newDebugId() {
-        return "dbg_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String requestId = MDC.get(RequestIdFilter.MDC_KEY);
+        return requestId != null ? requestId : UUID.randomUUID().toString();
     }
 }
