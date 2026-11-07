@@ -1,14 +1,13 @@
 package com.example.paymentpoc.payment.domain;
 
 import org.junit.jupiter.api.Test;
-import java.math.BigDecimal;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 
 class PaymentTest {
 
     private static final UUID OWNER_ID = UUID.randomUUID();
-    private static final Money MONEY = new Money(new BigDecimal("49.99"), "USD");
+    private static final Money MONEY = new Money(4999L, "USD");
 
     @Test
     void should_create_payment_with_status_CREATED() {
