@@ -1,16 +1,16 @@
 # Local development overrides. Never commit real secrets here.
+# When running under docker-compose, DB_URL is injected and takes precedence.
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/payment_local
-    username: payment
-    password: payment
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/payment_local}
+    username: ${DB_USERNAME:payment}
+    password: ${DB_PASSWORD:payment}
 
   security:
     oauth2:
       resourceserver:
         jwt:
-          # Point to a local Keycloak or similar IdP for local dev
-          issuer-uri: http://localhost:8180/realms/payment-poc
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8180/realms/payment-poc}
 
 logging:
   level:
